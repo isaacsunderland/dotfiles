@@ -22,6 +22,10 @@
           pkgs.stow
           pkgs.kitty
           pkgs.github-copilot-cli
+          pkgs.fzf
+          pkgs.zoxide
+          pkgs.eza
+          pkgs.nixpkgs-fmt
         ];
 
       services.nix-daemon.enable = true;
@@ -33,7 +37,7 @@
       nixpkgs.hostPlatform = "aarch64-darwin";
       security.pam.enableSudoTouchIdAuth = true;
 
-      users.users.omerxx.home = "/Users/isaacsunderland";
+      users.users.isaacsunderland.home = "/Users/isaacsunderland";
       home-manager.backupFileExtension = "backup";
       nix.configureBuildUsers = true;
       nix.useDaemon = true;
@@ -42,12 +46,12 @@
         dock.autohide = true;
         dock.mru-spaces = false;
         finder.AppleShowAllExtensions = true;
-        finder.FXPreferredViewStyle = "clmv";
+        # finder.FXPreferredViewStyle = "clmv";
         screencapture.location = "~/Pictures/screenshots";
         NSGlobalDomain."com.apple.trackpad.trackpadCornerClickBehavior" = 1;
         NSGlobalDomain.AppleShowAllFiles = true;
-        NSGlobalDomain.NSDisableAutomaticTermination = true;
-        NSGlobalDomain.AppleInterfaceStyleSwitchesAutomatically = true;
+        # NSGlobalDomain.NSDisableAutomaticTermination = true;
+        # NSGlobalDomain.AppleInterfaceStyleSwitchesAutomatically = true;
         NSGlobalDomain.AppleFontSmoothing = 2;
         screensaver.askForPassword = false;
         finder._FXShowPosixPathInTitle = true;
@@ -55,8 +59,6 @@
         dock.wvous-bl-corner = 13;
         dock.tilesize = 24;
         dock.show-recents = false;
-        dock.expose-group-by-app = false;
-
       };
 
 
