@@ -15,7 +15,7 @@
 
 # layouts - Ordered list of layouts to use by layout key (default tall, wide, fullscreen, and column).
 layouts:
-  - 3column-middle # The legacy name of "3column-middle"
+  - middle-wide # The legacy name of "3column-middle"
   # - tall   
   - two-pane
   # - wide
@@ -249,7 +249,7 @@ window-margin-size: 0
 
 # The max number of windows that may be visible on a screen at one time before
 # additional windows are minimized. A value of 0 disables the feature.
-window-max-count: 0
+window-max-count: 5
 
 # The smallest height that a window can be sized to regardless of its layout frame (in px, default 0).
 window-minimum-height: 0
@@ -262,7 +262,9 @@ floating:
   - com.apple.systempreferences
   - org.openvpn.client.app
   - com.microsoft.CompanyPortalMac
-  - com.microsoft.rdc.macos
+  - id: "com.microsoft.rdc.macos"
+    window-titles:
+      - "Microsoft Remote Desktop"
 
 
 # Boolean flag determining behavior of the floating list. true if the applications should be floating and all others tiled. false if the applications should be tiled and all others floating (default true).
@@ -284,7 +286,7 @@ mouse-follows-focus: false
 focus-follows-mouse: false
 
 # true if dragging and dropping windows on to each other should swap their positions (default false).
-mouse-swaps-windows: false
+mouse-swaps-windows: true
 
 # true if changing the frame of a window with the mouse should update the layout to accommodate the change (default false). Note that not all layouts will be able to respond to the change.
 mouse-resizes-windows: true
