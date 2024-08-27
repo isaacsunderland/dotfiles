@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-stow .
+darwin-rebuild init --flake ~/dotfiles/nix-darwin

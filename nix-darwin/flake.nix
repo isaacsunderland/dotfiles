@@ -28,6 +28,8 @@
           pkgs.nixpkgs-fmt
         ];
 
+
+      
       services.nix-daemon.enable = true;
       nixpkgs.config.allowUnfree = true;      
       nix.settings.experimental-features = "nix-command flakes";
@@ -43,10 +45,11 @@
       nix.useDaemon = true;
 
       system.defaults = {
-        dock.autohide = true;
+        spaces.spans-displays = true;
+	      dock.autohide = true;
         dock.mru-spaces = false;
         finder.AppleShowAllExtensions = true;
-        # finder.FXPreferredViewStyle = "clmv";
+        finder.FXPreferredViewStyle = "clmv";
         screencapture.location = "~/Pictures/screenshots";
         NSGlobalDomain."com.apple.trackpad.trackpadCornerClickBehavior" = 1;
         NSGlobalDomain.AppleShowAllFiles = true;
@@ -59,7 +62,7 @@
         dock.wvous-bl-corner = 13;
         dock.tilesize = 24;
         dock.show-recents = false;
-      };
+      };	
 
 
 
@@ -78,6 +81,11 @@
         "bitwarden"
         "zoom"
         "github"
+        "dbeaver-community"
+        "drawio"
+	      "visual-studio-code"
+	      "postman"
+        "font-fira-code-nerd-font"
       ];
       homebrew.brews = [
 	      

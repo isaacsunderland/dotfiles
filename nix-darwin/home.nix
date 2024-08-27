@@ -6,6 +6,7 @@
 let
   starshipConfig = import ./starship.nix { inherit lib; };
   zshConfig = import ./zsh.nix { inherit lib; };
+  kittyConfig = import ./kitty.nix { inherit lib; };
 in
 {
   home.username = "isaacsunderland";
@@ -23,6 +24,7 @@ in
   home.file = {
     # ".zshrc".source = ~/dotfiles/zshrc/.zshrc;
     ".config/nix-darwin".source = ~/dotfiles/nix-darwin;
+    ".amethyst.yml".source = ~/dotfiles/amethyst/.amethyst.yml;
   };
 
   home.sessionVariables = { };
@@ -33,8 +35,9 @@ in
   ];
 
   programs.starship = starshipConfig.programs.starship;
-
+  programs.kitty = kittyConfig.programs.kitty;
   programs.zsh = zshConfig.programs.zsh;
+  
   programs.zoxide.enableZshIntegration = true;
   programs.home-manager.enable = true;
 
