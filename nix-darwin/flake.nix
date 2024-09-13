@@ -48,20 +48,28 @@
         spaces.spans-displays = true;
 	      dock.autohide = true;
         dock.mru-spaces = false;
-        finder.AppleShowAllExtensions = true;
-        finder.FXPreferredViewStyle = "clmv";
+        NSGlobalDomain.AppleShowAllExtensions = true;
+        NSGlobalDomain.NSWindowShouldDragOnGesture = true;
         screencapture.location = "~/Pictures/screenshots";
         NSGlobalDomain."com.apple.trackpad.trackpadCornerClickBehavior" = 1;
         NSGlobalDomain.AppleShowAllFiles = true;
+	LaunchServices.LSQuarantine = false;
         # NSGlobalDomain.NSDisableAutomaticTermination = true;
         # NSGlobalDomain.AppleInterfaceStyleSwitchesAutomatically = true;
         NSGlobalDomain.AppleFontSmoothing = 2;
         screensaver.askForPassword = false;
         finder._FXShowPosixPathInTitle = true;
         finder.AppleShowAllFiles = true;
-        dock.wvous-bl-corner = 13;
+	finder.ShowPathbar = true;
+	finder.FXPreferredViewStyle = "NLsv";
+        finder.CreateDesktop = true;
+	dock.static-only = true;
+	dock.wvous-bl-corner = 13;
         dock.tilesize = 24;
         dock.show-recents = false;
+	dock.showhidden = true;
+	dock.show-process-indicators = true;
+	dock.minimize-to-application = true;
       };	
 
 
@@ -88,7 +96,7 @@
         "font-fira-code-nerd-font"
       ];
       homebrew.brews = [
-	      
+	      "kafka"
       ];
 
     };
