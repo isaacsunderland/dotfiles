@@ -18,14 +18,13 @@
       # $ nix-env -qaP | grep wget
       environment.systemPackages =
         [ 
-	        pkgs.vim
-          pkgs.stow
-          pkgs.kitty
           pkgs.github-copilot-cli
           pkgs.fzf
           pkgs.zoxide
           pkgs.eza
           pkgs.nixpkgs-fmt
+	        pkgs.fd
+	        pkgs.neovim
         ];
 
 
@@ -45,8 +44,8 @@
       nix.useDaemon = true;
 
       system.defaults = {
-        spaces.spans-displays = true;
-	      dock.autohide = true;
+        spaces.spans-displays = false;
+	dock.autohide = true;
         dock.mru-spaces = false;
         NSGlobalDomain.AppleShowAllExtensions = true;
         NSGlobalDomain.NSWindowShouldDragOnGesture = true;
@@ -60,7 +59,7 @@
         screensaver.askForPassword = false;
         finder._FXShowPosixPathInTitle = true;
         finder.AppleShowAllFiles = true;
-	finder.ShowPathbar = true;
+	      finder.ShowPathbar = true;
 	finder.FXPreferredViewStyle = "NLsv";
         finder.CreateDesktop = true;
 	dock.static-only = true;
@@ -82,7 +81,6 @@
         "google-chrome"
         "microsoft-remote-desktop"
         "vmware-horizon-client"
-        "amethyst"
         "bitwarden"
         "docker"
         "openvpn-connect"
@@ -91,12 +89,14 @@
         "github"
         "dbeaver-community"
         "drawio"
-	      "visual-studio-code"
-	      "postman"
+	"visual-studio-code"
+	"postman"
         "font-fira-code-nerd-font"
+	"amethyst"
+	"kitty"
       ];
       homebrew.brews = [
-	      "kafka"
+	"kafka"
       ];
 
     };

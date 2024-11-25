@@ -1,12 +1,16 @@
 { lib, ... }: {
   programs.zsh = {
     enable = true;
-    autosuggestion.enable = true;
-    syntaxHighlighting.enable = true;
+    #enablesyntaxHighlighting = true;
     enableCompletion = true;
+    #enableFzfCompletion = true;
+    #enableFzfGit = true;
+    #enableFzfHistory = true;
+
     shellAliases = {
       l = "eza -l --icons --git -a";
       lt = "eza --tree --level=2 --long --icons --git";
+      vim = "nvim";
     };
     localVariables = {
       # ZSH = "/Users/isaacsunderland/.oh-my-zsh";
@@ -22,7 +26,7 @@
       # autoload -Uz compinit
       # compinit
       # VI Mode!!!
-      bindkey jj vi-cmd-mode
+      # bindkey jj vi-cmd-mode
 
       # FZF
       [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
