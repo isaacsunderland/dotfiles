@@ -1,0 +1,220 @@
+" Vim Configuration
+" Cross-platform, version-compatible setup with proper swap/backup/undo handling
+" This works with both Vim 8.0+ and Neovim
+
+" ============================================================================
+" Create directories if they don't exist
+" ============================================================================
+
+" Helper function to create directories
+function! EnsureDir(path)
+    let expanded = expand(a:path)
+    if !isdirectory(expanded)
+        call mkdir(expanded, 'p')
+    endif
+endfunction
+
+" Create necessary directories
+silent call EnsureDir('~/.local/share/vim/swap')
+silent call EnsureDir('~/.local/share/vim/backup')
+silent call EnsureDir('~/.local/share/vim/undo')
+
+" ============================================================================
+" Basic Settings
+" ============================================================================
+
+set nocompatible              " Use modern Vim features
+set number                    " Show line numbers
+set cursorline                " Highlight current line
+set signcolumn=yes            " Always show sign column (if available)
+
+" Indentation
+set expandtab                 " Use spaces instead of tabs
+set tabstop=4                 " Tab width
+set shiftwidth=4              " Indent width
+set softtabstop=4             " Soft tab width
+set autoindent                " Auto indent new lines
+set smartindent               " Smart indentation
+
+" Search
+set ignorecase                " Case insensitive search
+set smartcase                 " Smart case sensitivity
+set hlsearch                  " Highlight search results
+set incsearch                 " Incremental search
+
+" Display
+set wrap                      " Wrap long lines
+set linebreak                 " Break at word boundaries
+set list                      " Show whitespace characters
+set listchars=tab:»\ ,trail:·,nbsp:↳
+
+" Syntax highlighting
+syntax enable                 " Enable syntax highlighting
+filetype plugin indent on     " Enable file type detection
+
+" ============================================================================
+" Files and Backup
+" ============================================================================
+
+set undofile                  " Enable persistent undo
+set backup                    " Keep backup files
+set writebackup               " Backup before overwriting
+set swapfile                  " Use swap files (for recovery)
+
+" Set directories for swap, backup, and undo
+" Using // at the end tells Vim to use full path in swap filenames (prevents collisions)
+let swap_dir = expand('~/.local/share/vim/swap') . '//'
+let backup_dir = expand('~/.local/share/vim/backup') . '//'
+let undo_dir = expand('~/.local/share/vim/undo') . '//'
+
+" Set with fallbacks (. means current directory)
+if !empty(swap_dir)
+    let &directory = swap_dir . ',.'
+endif
+if !empty(backup_dir)
+    let &backupdir = backup_dir . ',.'
+endif
+if !empty(undo_dir) && has('persistent_undo')
+    let &undodir = undo_dir
+endif
+
+" ============================================================================
+" Editor Behavior
+" ============================================================================
+
+set mouse=a                   " Enable mouse support
+set encoding=utf-8            " UTF-8 encoding
+if has('termguicolors')
+    set termguicolors         " True color support (if available)
+endif
+
+" Split behavior
+set splitright                " New vertical splits on the right
+set splitbelow                " New horizontal splits below
+
+" Command mode
+set wildmenu                  " Enhanced command mode completion
+set wildmode=list:longest     " List all matches
+
+" ============================================================================
+" Performance
+" ============================================================================
+
+set updatetime=300            " Faster update time
+set timeoutlen=500            " Timeout for mapped sequences
+set ttimeoutlen=10            " Timeout for terminal key codes
+
+" ============================================================================
+" Clipboard
+" ============================================================================
+
+" Use system clipboard if available
+if has('unnamedplus')
+    set clipboard=unnamedplus
+elseif has('clipboard')
+    set clipboard=unnamed
+endif
+
+" ============================================================================
+" Keybindings
+" ============================================================================
+
+" Set leader key
+let mapleader = ' '
+let maplocalleader = ' '
+
+" Window navigation
+nnoremap <C-h> <C-w>h
+nnoremap <C-j> <C-w>j
+nnoremap <C-k> <C-w>k
+nnoremap <C-l> <C-w>l
+
+" Window resizing (if terminal supports these key combinations)
+nnoremap <silent> <C-Up> :resize +2<CR>
+nnoremap <silent> <C-Down> :resize -2<CR>
+nnoremap <silent> <C-Left> :vertical resize -2<CR>
+nnoremap <silent> <C-Right> :vertical resize +2<CR>
+
+" Clear search highlighting
+nnoremap <silent> <Esc> :nohlsearch<CR><Esc>
+
+" Better indenting in visual mode
+vnoremap < <gv
+vnoremap > >gv
+
+" ============================================================================
+" Colorscheme
+" ============================================================================
+
+" Use a built-in colorscheme (these work in all Vim versions)
+try
+    colorscheme default
+catch
+    " Fallback to default if colorscheme not found
+endtry
+
+" ============================================================================
+" File Type Specific Settings
+" ============================================================================
+
+" Lua files
+autocmd FileType lua setlocal shiftwidth=2 tabstop=2
+
+" YAML files
+autocmd FileType yaml,yml setlocal shiftwidth=2 tabstop=2
+
+" JSON files
+autocmd FileType json,jsonc setlocal shiftwidth=2 tabstop=2
+
+" ============================================================================
+" Auto Commands
+" ============================================================================
+
+" Save on focus lost (if supported)
+if has('autocmd')
+    autocmd FocusLost * silent! wa
+endif
+
+" Remove trailing whitespace on save
+autocmd BufWritePre * :%s/\s\+$//e
+
+" ============================================================================
+" Status Line
+" ============================================================================
+
+set laststatus=2
+set statusline=%f\ %m\ %r\ %h\ %w\ %=\ %l:%c\ %p%%
+
+" ============================================================================
+" Version-Specific Settings
+" ============================================================================
+
+" Neovim specific settings
+if has('nvim')
+    " Neovim has different defaults
+    set shada=!,'100,<50,s10,h
+else
+    " Vim specific settings
+    set viminfo='100,<50,s10,h
+endif
+
+" ============================================================================
+" Information
+" ============================================================================
+
+" Print welcome message with configuration info
+if argc() == 0
+    echom "╔════════════════════════════════════════╗"
+    echom "║         Vim/Neovim Configured          ║"
+    echom "╚════════════════════════════════════════╝"
+    echom ""
+    echom "Configuration: ~/.vimrc or ~/.config/nvim/init.lua"
+    echom "Swap Dir: ~/.local/share/vim(nvim)/swap"
+    echom "Backup Dir: ~/.local/share/vim(nvim)/backup"
+    echom "Undo Dir: ~/.local/share/vim(nvim)/undo"
+    echom ""
+    echom "Leader Key: <Space>"
+    echom "Window Nav: <C-h/j/k/l>"
+    echom "Window Size: <C-Arrow>"
+    echom ""
+endif

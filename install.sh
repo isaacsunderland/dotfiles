@@ -87,23 +87,52 @@ echo "Linking configuration files..."
 if [ "$OS_TYPE" != "remote-console" ] && [ "$OS_TYPE" != "remote-windows" ]; then
     ln -sfv "$DOTFILES_DIR/config/kitty/kitty.conf" ~/.config/kitty/
     ln -sfv "$DOTFILES_DIR/config/starship.toml" ~/.config/starship.toml
-    ln -sfv "$DOTFILES_DIR/zshrc/.zshrc" ~/.zshrc
+    ln -sfv "$DOTFILES_DIR/.zshrc" ~/.zshrc
+    
+    # Setup Vim/Neovim configuration
+    echo "Setting up Vim/Neovim configuration..."
+    bash "$DOTFILES_DIR/setup-vim.sh"
+    
+    # Setup VSCode configuration
+    echo "Setting up VSCode configuration..."
+    bash "$DOTFILES_DIR/setup-vscode.sh"
 else
-    echo "Remote environment detected - skipping config file linking"
+    echo "Remote environment detected - linking shell configs only"
+    ln -sfv "$DOTFILES_DIR/.zshrc" ~/.zshrc
+    ln -sfv "$DOTFILES_DIR/.bashrc" ~/.bashrc
+    
+    # Setup Vim/Neovim configuration (remote systems may have these)
+    echo "Setting up Vim/Neovim configuration..."
+    bash "$DOTFILES_DIR/setup-vim.sh"
+    
+    # Setup Nano configuration (fallback editor with vim-like bindings)
+    echo "Setting up Nano configuration..."
+    bash "$DOTFILES_DIR/setup-nano.sh"
+    
+    # Setup VSCode configuration (if available on remote)
+    echo "Setting up VSCode configuration..."
+    bash "$DOTFILES_DIR/setup-vscode.sh"
 fi
 
-# 5. Link amethyst config (macOS only)
-if [ "$OS_TYPE" = "macos" ]; then
-    echo "Linking amethyst configuration..."
-    ln -sfv "$DOTFILES_DIR/amethyst/.amethyst.yml" ~/.amethyst.yml
-fi
-
-# 6. Set shell to zsh if not already (Unix-like systems)
-if [ "$OS_TYPE" != "windows" ] && [ "$OS_TYPE" != "remote-windows" ]; then
-    if command -v zsh &> /dev/null && [ "$SHELL" != "/bin/zsh" ]; then
-        echo "Setting shell to zsh..."
-        chsh -s /bin/zsh 2>/dev/null || echo "Note: Could not change shell (may require manual intervention)"
+# 5. Set shell to zsh if available, otherwise use bash (Unix-like systems)
+if command -v zsh &> /dev/null; then
+    SHELL_NAME="zsh"
+    if [ "$OS_TYPE" != "windows" ] && [ "$OS_TYPE" != "remote-windows" ]; then
+        if [ "$SHELL" != "/bin/zsh" ] && [ "$SHELL" != "$(command -v zsh)" ]; then
+            echo "Setting shell to zsh..."
+            chsh -s "$(command -v zsh)" 2>/dev/null || echo "Note: Could not change shell (may require manual intervention)"
+        fi
     fi
+elif command -v bash &> /dev/null; then
+    SHELL_NAME="bash"
+    if [ "$OS_TYPE" != "windows" ] && [ "$OS_TYPE" != "remote-windows" ]; then
+        if [ "$SHELL" != "/bin/bash" ] && [ "$SHELL" != "$(command -v bash)" ]; then
+            echo "zsh not available, setting shell to bash..."
+            chsh -s "$(command -v bash)" 2>/dev/null || echo "Note: Could not change shell (may require manual intervention)"
+        fi
+    fi
+else
+    SHELL_NAME="sh"  # Ultimate fallback
 fi
 
 # 7. Apply OS-specific system defaults
@@ -133,9 +162,19 @@ esac
 echo "✓ Dotfiles installation complete for $OS_TYPE!"
 echo ""
 echo "Next steps:"
-echo "1. Restart your terminal or run: exec zsh"
-echo "2. Configure any additional application settings manually"
-echo "3. Review ~/.zshrc and ~/.config/starship.toml for any customizations"
+if [ "$SHELL_NAME" = "bash" ]; then
+    echo "1. Restart your terminal or run: exec bash"
+    echo "2. Configure any additional application settings manually"
+    echo "3. Review ~/.bashrc for any customizations"
+elif [ "$SHELL_NAME" = "zsh" ]; then
+    echo "1. Restart your terminal or run: exec zsh"
+    echo "2. Configure any additional application settings manually"
+    echo "3. Review ~/.zshrc and ~/.config/starship.toml for any customizations"
+else
+    echo "1. Restart your terminal"
+    echo "2. Configure any additional application settings manually"
+    echo "3. Using basic shell - consider installing zsh or bash for full features"
+fi
 echo ""
 echo "Installation information:"
 echo "  OS: $OS_TYPE"

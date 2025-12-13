@@ -1,0 +1,105 @@
+# Nano Configuration with Vim-like Keybindings
+# For systems where only nano is available
+
+## Interface Options
+set linenumbers        # Show line numbers
+set autoindent         # Auto-indent new lines
+set tabsize 4          # Tab width
+set tabstospaces       # Convert tabs to spaces
+set mouse              # Enable mouse support
+set smooth             # Smooth scrolling
+set softwrap           # Soft wrap long lines
+
+## Search Options
+set casesensitive      # Case-sensitive search by default
+set regexp             # Enable regular expressions in search
+
+## Editor Behavior
+set multibuffer        # Allow opening multiple files
+set nohelp             # Hide help lines (more like vim)
+set suspend            # Allow Ctrl+Z to suspend
+
+## Backup and Undo
+set backup             # Keep backup files
+set backupdir "~/.local/share/nano/backup"
+set historylog         # Remember search/replace history
+set positionlog        # Remember cursor position
+
+## Syntax Highlighting
+include "/usr/share/nano/*.nanorc"
+
+## Vim-like Keybindings
+## Note: Nano doesn't support true vim modes, but we can add some familiar bindings
+
+# Navigation (using Alt as prefix for vim-like commands)
+# Alt+h, Alt+j, Alt+k, Alt+l for left, down, up, right
+bind ^H back main           # Ctrl+H: back (like h in vim)
+bind ^J down main           # Ctrl+J: down (like j in vim)  
+bind ^K up main             # Ctrl+K: up (like k in vim)
+bind ^L forward main        # Ctrl+L: forward (like l in vim)
+
+# Word navigation
+bind M-b prevword main      # Alt+b: previous word
+bind M-w nextword main      # Alt+w: next word
+bind M-e nextword main      # Alt+e: next word (vim-style)
+
+# Line navigation  
+bind M-0 firstline main     # Alt+0: go to first line (like gg in vim)
+bind M-$ lastline main      # Alt+$: go to last line (like G in vim)
+bind ^A home main           # Ctrl+A: beginning of line (like 0 in vim)
+bind ^E end main            # Ctrl+E: end of line (like $ in vim)
+
+# Delete operations (more vim-like)
+bind M-d cutwordright main  # Alt+d: delete word (like dw in vim)
+bind ^D delete main         # Ctrl+D: delete char under cursor (like x in vim)
+bind ^U cutrestoffile main  # Ctrl+U: delete to end of file
+
+# Undo/Redo
+bind M-u undo main          # Alt+u: undo (like u in vim)
+bind M-r redo main          # Alt+r: redo (like Ctrl+R in vim)
+
+# Search and Replace
+bind ^F whereis main        # Ctrl+F: search (like / in vim)
+bind ^G findnext main       # Ctrl+G: find next (like n in vim)
+bind M-r replace main       # Alt+r: replace (like :s in vim)
+
+# File operations
+bind ^S writeout main       # Ctrl+S: save (like :w in vim)
+bind ^Q exit main           # Ctrl+Q: quit (like :q in vim)
+bind ^O insert main         # Ctrl+O: open file (like :e in vim)
+
+# Copy/Paste (more intuitive)
+bind M-y copy main          # Alt+y: copy (like y in vim)
+bind M-p paste main         # Alt+p: paste (like p in vim)
+bind ^T cut main            # Ctrl+T: cut (similar to d in vim)
+
+# Visual mode simulation
+bind M-v mark main          # Alt+v: start selection (like v in vim)
+
+# Indentation
+bind M-] indent main        # Alt+]: indent (like >> in vim)
+bind M-[ unindent main      # Alt+[: unindent (like << in vim)
+
+# Window/Buffer operations
+bind M-n nextbuf main       # Alt+n: next buffer (like :bn in vim)
+bind M-p prevbuf main       # Alt+p: previous buffer (like :bp in vim)
+
+# Comments
+# Nano doesn't have vim's command mode (:), but these bindings provide
+# some muscle-memory-compatible shortcuts for common operations.
+#
+# Quick Reference (Most Useful):
+# --------------------------------
+# Ctrl+J/K         - Up/Down (like j/k in vim)
+# Ctrl+A/E         - Home/End of line (like 0/$ in vim)
+# Alt+0/Alt+$      - First/Last line (like gg/G in vim)
+# Ctrl+F           - Search (like / in vim)
+# Ctrl+G           - Find next (like n in vim)
+# Ctrl+S           - Save (like :w in vim)
+# Ctrl+Q           - Quit (like :q in vim)
+# Alt+u/Alt+r      - Undo/Redo (like u/Ctrl+R in vim)
+# Alt+y/Alt+p      - Copy/Paste (like y/p in vim)
+# Ctrl+D           - Delete char (like x in vim)
+# Alt+v            - Start selection (like v in vim)
+#
+# Note: For true vim experience, install vim or neovim instead!

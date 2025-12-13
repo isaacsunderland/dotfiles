@@ -48,6 +48,14 @@ alias ...='cd ../..'
 alias grep='grep --color=auto'
 alias tree='find . -print | sed -e "s;[^/]*/;|____;g;s;____|; |;g"'
 
+# Editor fallback: neovim -> vim -> vi
+if command -v nvim &> /dev/null; then
+    alias vim='nvim'
+    alias vi='nvim'
+elif command -v vim &> /dev/null; then
+    alias vi='vim'
+fi
+
 # Minimal prompt customization
 if [ -z "$PS1_CUSTOM" ]; then
     if [ -n "$VIRTUAL_ENV" ]; then
@@ -88,10 +96,24 @@ echo "Setting up environment..."
 if [ ! -f "$HOME/.env_remote" ]; then
     cat > "$HOME/.env_remote" << 'EOF'
 # Remote Console Environment Variables
-export EDITOR=nano
 export LANG=en_US.UTF-8
 export LC_ALL=en_US.UTF-8
 export TERM=xterm-256color
+
+# Editor fallback chain: neovim -> vim -> vi -> nano
+if command -v nvim &> /dev/null; then
+    export EDITOR=nvim
+    export VISUAL=nvim
+elif command -v vim &> /dev/null; then
+    export EDITOR=vim
+    export VISUAL=vim
+elif command -v vi &> /dev/null; then
+    export EDITOR=vi
+    export VISUAL=vi
+else
+    export EDITOR=nano
+    export VISUAL=nano
+fi
 
 # Starship prompt if available
 if command -v starship &> /dev/null; then

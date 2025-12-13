@@ -2,6 +2,8 @@
 
 A pure Homebrew-based dotfiles configuration for macOS. No Nix complexity—just straightforward shell configuration, Homebrew packages, and standard config files.
 
+📚 **[Complete Documentation](docs/INDEX.md)** | [Quick Reference](docs/QUICK_REFERENCE.md) | [Multi-OS Setup](docs/MULTI_OS_SETUP.md)
+
 ## Quick Start
 
 Clone and install:
@@ -30,27 +32,50 @@ The install script will:
 2. Create config directories
 3. Link configuration files to their proper locations
 4. Apply OS-specific system defaults
-5. Set zsh as the default shell (where applicable)
+5. Set zsh as the default shell (falls back to bash if zsh unavailable)
 
 ## Structure
 
 ```
 dotfiles/
+├── README.md                     # This file - start here!
 ├── install.sh                    # Main installation script (supports all OS types)
+├── setup-vim.sh                  # Vim/Neovim configuration setup
+├── setup-vscode.sh               # VSCode configuration setup
+├── setup-nano.sh                 # Nano configuration setup (vim-like bindings)
 ├── macos-defaults.sh             # macOS system configuration
 ├── linux-defaults.sh             # Linux system configuration
 ├── windows-defaults.sh           # Windows system configuration
 ├── remote-console-defaults.sh    # Remote/SSH headless configuration
 ├── remote-windows-defaults.sh    # Remote Windows configuration
 ├── Brewfile                      # Homebrew package definitions
+├── docs/                         # Complete documentation
+│   ├── INDEX.md                  # Documentation index
+│   ├── MULTI_OS_SETUP.md         # Platform-specific guides
+│   ├── VIM_NEOVIM_SETUP.md       # Editor configuration
+│   ├── VSCODE_SETUP.md           # VSCode settings sync
+│   ├── NANO_SETUP.md             # Nano vim-like bindings
+│   ├── EDITOR_FALLBACK.md        # Editor fallback chain
+│   ├── SHELL_FALLBACK.md         # Shell fallback system
+│   ├── SWAP_FILE_FIX.md          # Troubleshooting
+│   └── ... (more docs)
 ├── config/                       # Configuration files
 │   ├── kitty/
 │   │   └── kitty.conf            # Kitty terminal config
+│   ├── nvim/
+│   │   └── init.lua              # Neovim config (Lua)
+│   ├── vim/
+│   │   └── vimrc                 # Vim config (Vimscript)
+│   ├── nano/
+│   │   └── .nanorc               # Nano config (vim-like bindings)
+│   ├── vscode/
+│   │   ├── settings.json         # VSCode user settings
+│   │   └── keybindings.json      # VSCode keybindings
 │   └── starship.toml             # Starship prompt config
 ├── zshrc/
 │   └── .zshrc                    # Zsh shell config
-├── amethyst/
-│   └── .amethyst.yml             # Amethyst window manager config (macOS)
+├── bashrc/
+│   └── .bashrc                   # Bash shell config (fallback)
 └── README.md                     # This file
 ```
 
@@ -61,7 +86,7 @@ Full-featured setup with:
 - Homebrew package manager
 - System defaults configuration (Dock, Finder, etc.)
 - Touch ID for sudo
-- Amethyst window manager support
+- Caps Lock remapped to Escape
 
 Run: `bash install.sh macos` or `bash install.sh`
 
@@ -116,7 +141,11 @@ Features:
 
 ## Configuration Files
 
-### Zsh (.zshrc)
+### Shell Configuration (Zsh/Bash)
+
+**Automatic fallback**: If zsh is not available, the install script automatically uses bash instead.
+
+**Zsh** (`~/.zshrc`):
 Core shell configuration with:
 - Command aliases (eza, vim, etc.)
 - Navigation functions (cx, fcd, f, fv)
@@ -124,6 +153,54 @@ Core shell configuration with:
 - Z.sh for directory jumping
 - Zoxide as a modern cd replacement
 - Starship prompt initialization
+- Editor fallback chain (nvim → vim → vi)
+
+**Bash** (`~/.bashrc`):
+Fallback shell configuration with:
+- Same aliases and functions as zsh
+- Bash completion support
+- Compatible navigation and FZF features
+- Starship prompt (or simple git-aware fallback)
+- Editor fallback chain (nvim → vim → vi → nano)
+
+**Nano** (`~/.nanorc`):
+Last-resort editor with vim-like keybindings:
+- Ctrl+J/K for up/down (like j/k)
+- Ctrl+A/E for home/end (like 0/$)
+- Alt+u/r for undo/redo (like u/Ctrl+R)
+- Ctrl+F/G for search/next (like /n)
+- And more vim-familiar shortcuts
+
+### Vim/Neovim Configuration
+Both Vim 8.0+ and Neovim with:
+- Proper swap, backup, and undo file management
+- Cross-platform directory setup
+- Window navigation keybindings
+- Syntax highlighting
+- Auto-formatting and cleanup
+- Multi-version compatibility
+
+**Neovim** (`~/.config/nvim/init.lua`):
+- Modern Lua-based configuration
+- Advanced features and automation
+
+**Vim** (`~/.vimrc`):
+- Traditional Vimscript configuration
+- Compatible with Vim 8.0+
+
+### VSCode Configuration
+
+**Cross-platform settings sync** via dotfiles:
+- **Settings** (`settings.json`): Editor preferences, extensions config, language settings
+- **Keybindings** (`keybindings.json`): Custom keyboard shortcuts
+
+The setup script automatically detects VSCode installation on:
+- **macOS**: `~/Library/Application Support/Code/User`
+- **Linux**: `~/.config/Code/User`
+- **Windows**: `%APPDATA%/Code/User`
+- **WSL**: `~/.vscode-server/data/Machine` or Windows path via WSL
+
+**Note**: Extension sync is handled by VSCode's built-in Settings Sync feature (sign in with GitHub/Microsoft).
 
 ### Kitty Terminal (kitty.conf)
 Terminal settings:
@@ -134,9 +211,6 @@ Terminal settings:
 
 ### Starship (starship.toml)
 Custom prompt configuration with Git status, command duration, and language info.
-
-### Amethyst (.amethyst.yml)
-Window manager configuration for tiling on macOS.
 
 ## Packages Installed
 
@@ -192,7 +266,7 @@ brew bundle --file=./Brewfile
 ```
 
 ### Modify shell configuration
-Edit `zshrc/.zshrc` directly. Changes take effect in new terminal sessions.
+Edit `.zshrc` directly in the dotfiles root. Changes take effect in new terminal sessions.
 
 ### Adjust macOS defaults
 Edit `macos-defaults.sh` and run:
@@ -221,7 +295,7 @@ echo $PATH
 
 To remove symlinks and revert to system defaults:
 ```bash
-rm ~/.zshrc ~/.config/kitty/kitty.conf ~/.config/starship.toml ~/.amethyst.yml
+rm ~/.zshrc ~/.bashrc ~/.config/kitty/kitty.conf ~/.config/starship.toml ~/.nanorc
 ```
 
 Homebrew packages can be removed selectively or completely uninstalled if desired.

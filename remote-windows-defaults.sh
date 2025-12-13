@@ -69,9 +69,26 @@ if [ ! -f "$HOME/.shell_profile_windows_remote" ]; then
 # Configuration for accessing Windows systems remotely via SSH or WSL
 
 # Environment setup
-export EDITOR=nano
 export LANG=en_US.UTF-8
 export LC_ALL=en_US.UTF-8
+
+# Editor fallback chain: neovim -> vim -> vi -> nano
+if command -v nvim &> /dev/null; then
+    export EDITOR=nvim
+    export VISUAL=nvim
+    alias vim='nvim'
+    alias vi='nvim'
+elif command -v vim &> /dev/null; then
+    export EDITOR=vim
+    export VISUAL=vim
+    alias vi='vim'
+elif command -v vi &> /dev/null; then
+    export EDITOR=vi
+    export VISUAL=vi
+else
+    export EDITOR=nano
+    export VISUAL=nano
+fi
 
 # Windows-specific PATH additions for WSL
 if grep -qi microsoft /proc/version 2>/dev/null; then
@@ -157,8 +174,20 @@ export LANG=en_US.UTF-8
 export LC_ALL=en_US.UTF-8
 export TERM=xterm-256color
 
-# Editor preference
-export EDITOR=nano
+# Editor fallback chain: neovim -> vim -> vi -> nano
+if command -v nvim &> /dev/null; then
+    export EDITOR=nvim
+    export VISUAL=nvim
+elif command -v vim &> /dev/null; then
+    export EDITOR=vim
+    export VISUAL=vim
+elif command -v vi &> /dev/null; then
+    export EDITOR=vi
+    export VISUAL=vi
+else
+    export EDITOR=nano
+    export VISUAL=nano
+fi
 
 # Starship prompt configuration (if available)
 if command -v starship &> /dev/null; then

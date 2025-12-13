@@ -6,6 +6,8 @@ brew "fzf"
 brew "zoxide"
 brew "eza"
 brew "fd"
+brew "bat"          # Modern cat replacement
+brew "ripgrep"      # Modern grep replacement
 brew "neovim"
 brew "starship"
 brew "z"

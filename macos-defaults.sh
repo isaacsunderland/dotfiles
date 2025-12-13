@@ -54,6 +54,20 @@ sudo tee /etc/pam.d/sudo_local > /dev/null << 'EOF'
 auth       sufficient     pam_tid.so
 EOF
 
+# Remap Caps Lock to ESC
+echo "Remapping Caps Lock to Escape..."
+# Get the ID of the built-in keyboard
+KEYBOARD_ID=$(ioreg -r -n IOHIDKeyboard -d 1 | grep -E '(VendorID|ProductID)' | awk 'NR==1{v=$NF} NR==2{print v"-"$NF}')
+
+if [ -n "$KEYBOARD_ID" ]; then
+    # Set Caps Lock (key code 0) to Escape (key code 30064771113)
+    defaults -currentHost write -g com.apple.keyboard.modifiermapping.$KEYBOARD_ID -array '<dict><key>HIDKeyboardModifierMappingDst</key><integer>30064771113</integer><key>HIDKeyboardModifierMappingSrc</key><integer>30064771129</integer></dict>'
+    echo "✓ Caps Lock remapped to Escape"
+else
+    echo "⚠️  Could not detect keyboard ID for Caps Lock remapping"
+    echo "   You can remap manually: System Settings → Keyboard → Modifier Keys"
+fi
+
 echo "Finished configuring macOS defaults."
 echo "Note: Some changes may require a restart or logout to take effect."
 echo "Touch ID has been enabled for sudo commands."

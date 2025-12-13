@@ -49,6 +49,20 @@ if command -v gsettings &> /dev/null; then
     
     # Window title bar buttons
     gsettings set org.gnome.desktop.wm.preferences button-layout 'appmenu:minimize,maximize,close' || true
+    
+    # Remap Caps Lock to Escape
+    echo "Remapping Caps Lock to Escape..."
+    gsettings set org.gnome.desktop.input-sources xkb-options "['caps:escape']" || true
+    echo "✓ Caps Lock remapped to Escape (GNOME)"
+fi
+
+# For non-GNOME systems, try setxkbmap
+if command -v setxkbmap &> /dev/null && [ -z "$WAYLAND_DISPLAY" ]; then
+    echo "Setting Caps Lock to Escape via X11..."
+    setxkbmap -option caps:escape
+    echo "✓ Caps Lock remapped to Escape (X11)"
+    echo "  Add 'setxkbmap -option caps:escape' to your ~/.xinitrc or display manager config"
+fi
 fi
 
 # X11/Wayland cursor settings
