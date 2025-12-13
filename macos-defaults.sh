@@ -1,0 +1,50 @@
+#!/bin/bash
+# macOS system defaults configuration
+# Run this script to configure system-wide macOS settings
+
+set -e
+
+echo "Configuring macOS system defaults..."
+
+# Spaces
+defaults write com.apple.spaces spans-displays -bool false
+
+# Dock settings
+defaults write com.apple.dock autohide -bool true
+defaults write com.apple.dock mru-spaces -bool false
+defaults write com.apple.dock static-only -bool true
+defaults write com.apple.dock wvous-bl-corner -int 13
+defaults write com.apple.dock tilesize -int 24
+defaults write com.apple.dock show-recents -bool false
+defaults write com.apple.dock showhidden -bool true
+defaults write com.apple.dock show-process-indicators -bool true
+defaults write com.apple.dock minimize-to-application -bool true
+defaults write com.apple.dock magnification -bool true
+defaults write com.apple.dock largesize -int 64
+
+# Finder settings
+defaults write com.apple.finder AppleShowAllFiles -bool true
+defaults write com.apple.finder ShowPathbar -bool true
+defaults write com.apple.finder FXPreferredViewStyle -string "NLsv"
+defaults write com.apple.finder CreateDesktop -bool true
+defaults write com.apple.finder _FXShowPosixPathInTitle -bool true
+
+# Global settings
+defaults write NSGlobalDomain AppleShowAllExtensions -bool true
+defaults write NSGlobalDomain NSWindowShouldDragOnGesture -bool true
+defaults write NSGlobalDomain AppleShowAllFiles -bool true
+defaults write NSGlobalDomain AppleFontSmoothing -int 2
+defaults write NSGlobalDomain "com.apple.trackpad.trackpadCornerClickBehavior" -int 1
+
+# Screenshot settings
+defaults write com.apple.screencapture location ~/Pictures/screenshots
+mkdir -p ~/Pictures/screenshots
+
+# LaunchServices
+defaults write com.apple.LaunchServices LSQuarantine -bool false
+
+# Screensaver
+defaults write com.apple.screensaver askForPassword -bool false
+
+echo "Finished configuring macOS defaults."
+echo "Note: Some changes may require a restart or logout to take effect."
