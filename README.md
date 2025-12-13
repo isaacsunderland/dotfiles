@@ -9,33 +9,110 @@ Clone and install:
 ```bash
 git clone <your-repo> ~/dotfiles
 cd ~/dotfiles
-bash install.sh
+bash install.sh [OS_TYPE]
+```
+
+### Installation Options
+
+The install script supports multiple OS types. If no argument is provided, it auto-detects your system:
+
+```bash
+bash install.sh                # Auto-detect OS
+bash install.sh macos          # macOS with Homebrew
+bash install.sh linux          # Linux with apt/dnf/pacman
+bash install.sh windows        # Windows (WSL2 or Git Bash)
+bash install.sh remote-console # Headless/SSH remote systems
+bash install.sh remote-windows # Windows systems via SSH or WSL
 ```
 
 The install script will:
-1. Install Homebrew (if needed)
-2. Install all packages from the Brewfile
+1. Install package manager and packages (or skip if in remote environment)
+2. Create config directories
 3. Link configuration files to their proper locations
-4. Apply macOS system defaults
-5. Set zsh as the default shell
+4. Apply OS-specific system defaults
+5. Set zsh as the default shell (where applicable)
 
 ## Structure
 
 ```
 dotfiles/
-├── install.sh              # Main installation script
-├── macos-defaults.sh       # macOS system configuration
-├── Brewfile                # Homebrew package definitions
-├── config/                 # Configuration files
+├── install.sh                    # Main installation script (supports all OS types)
+├── macos-defaults.sh             # macOS system configuration
+├── linux-defaults.sh             # Linux system configuration
+├── windows-defaults.sh           # Windows system configuration
+├── remote-console-defaults.sh    # Remote/SSH headless configuration
+├── remote-windows-defaults.sh    # Remote Windows configuration
+├── Brewfile                      # Homebrew package definitions
+├── config/                       # Configuration files
 │   ├── kitty/
-│   │   └── kitty.conf      # Kitty terminal config
-│   └── starship.toml       # Starship prompt config
+│   │   └── kitty.conf            # Kitty terminal config
+│   └── starship.toml             # Starship prompt config
 ├── zshrc/
-│   └── .zshrc              # Zsh shell config
+│   └── .zshrc                    # Zsh shell config
 ├── amethyst/
-│   └── .amethyst.yml       # Amethyst window manager config
-└── README.md               # This file
+│   └── .amethyst.yml             # Amethyst window manager config (macOS)
+└── README.md                     # This file
 ```
+
+## Supported Operating Systems
+
+### macOS
+Full-featured setup with:
+- Homebrew package manager
+- System defaults configuration (Dock, Finder, etc.)
+- Touch ID for sudo
+- Amethyst window manager support
+
+Run: `bash install.sh macos` or `bash install.sh`
+
+### Linux
+Compatible with apt, dnf, and pacman-based distributions:
+- Package installation via system package managers
+- GTK theme and file manager configuration
+- WSL/Wayland support
+- Minimal GUI customization
+
+Run: `bash install.sh linux`
+
+### Windows (WSL2 or Git Bash)
+Integrated Windows development environment:
+- PowerShell profile configuration
+- WSL2 settings (.wslconfig)
+- Git integration
+- Package management via Chocolatey/Scoop
+
+Run: `bash install.sh windows`
+
+### Remote Console / Headless SSH
+For minimal remote systems with no GUI or package manager access:
+- Pure shell configuration without system dependencies
+- Utility scripts (sysload, tree, findlarge)
+- SSH configuration template
+- Minimal resource footprint
+
+Run: `bash install.sh remote-console`
+
+Features:
+- Shell profiles and environment variables
+- System info and monitoring functions
+- Git configuration support
+- No package installation required
+
+### Remote Windows (SSH or WSL Access)
+Configure Windows systems accessed remotely:
+- Windows-specific shell aliases and functions
+- Network and disk checking utilities
+- OpenSSH Server configuration support
+- Windows PATH inspection tools
+- Service monitoring (WSL)
+
+Run: `bash install.sh remote-windows`
+
+Features:
+- WSL interoperability functions
+- PowerShell compatibility layer
+- Windows system monitoring scripts
+- SSH host configuration for Windows systems
 
 ## Configuration Files
 

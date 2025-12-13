@@ -46,5 +46,14 @@ defaults write com.apple.LaunchServices LSQuarantine -bool false
 # Screensaver
 defaults write com.apple.screensaver askForPassword -bool false
 
+# Touch ID for sudo
+echo "Configuring Touch ID for sudo..."
+sudo tee /etc/pam.d/sudo_local > /dev/null << 'EOF'
+# sudo_local: local config file for sudo PAM configuration
+# This file enables Touch ID authentication for sudo commands
+auth       sufficient     pam_tid.so
+EOF
+
 echo "Finished configuring macOS defaults."
 echo "Note: Some changes may require a restart or logout to take effect."
+echo "Touch ID has been enabled for sudo commands."
