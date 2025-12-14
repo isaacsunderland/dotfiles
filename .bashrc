@@ -173,3 +173,31 @@ if ! shopt -oq posix; then
         . /etc/bash_completion
     fi
 fi
+
+# Kubectl completion setup
+if command -v kubectl &> /dev/null; then
+    # Enable kubectl completion
+    source <(kubectl completion bash)
+    
+    # CloudNativePG (CNPG) kubectl plugin completion
+    if command -v kubectl-cnpg &> /dev/null; then
+        # Generate and install kubectl cnpg completion helper
+        if ! command -v kubectl_complete-cnpg &> /dev/null; then
+            cat > /tmp/kubectl_complete-cnpg <<'CNPG_EOF'
+#!/usr/bin/env sh
+# Call the __complete command passing it all arguments
+kubectl cnpg __complete "$@"
+CNPG_EOF
+            chmod +x /tmp/kubectl_complete-cnpg
+            
+            # Try to install to /usr/local/bin first, then homebrew bin
+            if [ -w /usr/local/bin ]; then
+                mv /tmp/kubectl_complete-cnpg /usr/local/bin/
+            elif [ -w /opt/homebrew/bin ]; then
+                mv /tmp/kubectl_complete-cnpg /opt/homebrew/bin/
+            else
+                echo "Warning: Could not install kubectl_complete-cnpg. Run with sudo or ensure /usr/local/bin is writable."
+            fi
+        fi
+    fi
+fi

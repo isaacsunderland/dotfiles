@@ -12,6 +12,8 @@ brew "neovim"
 brew "nano"         # GNU nano editor
 brew "starship"
 brew "z"
+brew "kubectl"      # Kubernetes CLI
+brew "kubectl-cnpg" # CloudNativePG plugin for kubectl
 
 # Optional brews - uncomment if needed
 # brew "kafka"
