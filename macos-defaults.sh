@@ -40,6 +40,10 @@ defaults write NSGlobalDomain "com.apple.trackpad.trackpadCornerClickBehavior" -
 defaults write com.apple.screencapture location ~/Pictures/screenshots
 mkdir -p ~/Pictures/screenshots
 
+# Battery menu - show both percentage and time remaining
+defaults write com.apple.menuextra.battery ShowPercent YES
+defaults write com.apple.menuextra.battery ShowTime YES
+
 # LaunchServices
 defaults write com.apple.LaunchServices LSQuarantine -bool false
 
