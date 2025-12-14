@@ -54,6 +54,11 @@ sudo tee /etc/pam.d/sudo_local > /dev/null << 'EOF'
 auth       sufficient     pam_tid.so
 EOF
 
+# Docker Desktop autostart
+echo "Configuring Docker Desktop to start at login..."
+defaults write com.docker.docker autoStart -bool true
+echo "✓ Docker Desktop will start automatically on login"
+
 # Remap Caps Lock to ESC
 echo "Remapping Caps Lock to Escape..."
 # Get the ID of the built-in keyboard
