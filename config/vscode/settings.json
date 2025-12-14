@@ -90,5 +90,8 @@
   ],
   "files.associations": {
     "*.json": "plaintext"
-  }
+  },
+  "editor.fontFamily": "'Meslo LG M Nerd Font', 'FiraCode Nerd Font', monospace",
+  "editor.fontLigatures": true,
+  "terminal.integrated.fontFamily": "'Meslo LG M Nerd Font', 'FiraCode Nerd Font', monospace"
 }
