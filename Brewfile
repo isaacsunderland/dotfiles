@@ -15,6 +15,7 @@ brew "z"
 brew "kubectl"      # Kubernetes CLI
 brew "kubectl-cnpg" # CloudNativePG plugin for kubectl
 brew "k9s"          # Kubernetes TUI
+brew "kind"         # Kubernetes in Docker
 
 # Optional brews - uncomment if needed
 # brew "kafka"

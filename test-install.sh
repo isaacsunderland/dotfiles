@@ -218,6 +218,7 @@ echo -e "\n${BLUE}═══ Kubernetes Tools ═══${NC}"
 test_command "kubectl" "kubectl" "false"
 test_command "kubectl-cnpg" "kubectl-cnpg" "false"
 test_command "k9s" "k9s" "false"
+test_command "kind" "kind" "false"
 
 echo -e "\n${BLUE}═══ Terminal Configuration ═══${NC}"
 test_file "Kitty config" ~/.config/kitty/kitty.conf "false"
