@@ -14,6 +14,7 @@ brew "starship"
 brew "z"
 brew "kubectl"      # Kubernetes CLI
 brew "kubectl-cnpg" # CloudNativePG plugin for kubectl
+brew "k9s"          # Kubernetes TUI
 
 # Optional brews - uncomment if needed
 # brew "kafka"
