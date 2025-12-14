@@ -9,6 +9,7 @@ brew "fd"
 brew "bat"          # Modern cat replacement
 brew "ripgrep"      # Modern grep replacement
 brew "neovim"
+brew "nano"         # GNU nano editor
 brew "starship"
 brew "z"
 

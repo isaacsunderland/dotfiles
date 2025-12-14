@@ -16,6 +16,36 @@ PASSED=0
 FAILED=0
 SKIPPED=0
 
+# Portable timeout function (works on macOS and Linux)
+run_with_timeout() {
+    local timeout_secs=$1
+    local cmd=$2
+    
+    # Create temporary file for output
+    local tmpfile=$(mktemp)
+    
+    # Run command with timeout
+    ( eval "$cmd" > "$tmpfile" 2>&1 ) &
+    local pid=$!
+    
+    # Wait with timeout using backgrounded sleep
+    sleep $timeout_secs && kill -9 $pid 2>/dev/null &
+    local killer=$!
+    
+    wait $pid 2>/dev/null
+    local exit_code=$?
+    
+    # Kill the killer if still running
+    kill -9 $killer 2>/dev/null
+    wait $killer 2>/dev/null
+    
+    # Return output and cleanup
+    cat "$tmpfile" 2>/dev/null || echo "unknown"
+    rm -f "$tmpfile"
+    
+    return $exit_code
+}
+
 # Detect OS
 detect_os() {
     if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -48,12 +78,22 @@ test_command() {
     local command=$2
     local required=$3  # true/false
     
+    printf "${BLUE}⏳${NC} Testing $name...${NC}\r"
+    
     if command -v $command &> /dev/null; then
-        local version=$(eval "$command --version 2>/dev/null | head -1" || echo "unknown")
+        local version=""
+        # Special handling for nano (use echo pipe to get version)
+        if [ "$command" = "nano" ]; then
+            version=$(echo "" | $command --version 2>&1 | head -1 | sed 's/^ *//')
+        else
+            version=$(run_with_timeout 1 "$command --version 2>&1 | head -1")
+        fi
+        printf "                                                                   \r"  # Clear line
         echo -e "${GREEN}✓${NC} $name: ${GREEN}AVAILABLE${NC} - $version"
         ((PASSED++))
         return 0
     else
+        printf "                                                                   \r"  # Clear line
         if [ "$required" = "true" ]; then
             echo -e "${RED}✗${NC} $name: ${RED}MISSING (REQUIRED)${NC}"
             ((FAILED++))
@@ -121,20 +161,33 @@ test_env "SHELL variable" "SHELL" ""
 
 echo -e "\n${BLUE}═══ Editor Configuration ═══${NC}"
 test_command "Neovim" "nvim" "false"
-test_command "Vim" "vim" "false"
 test_command "Vi" "vi" "true"
 test_command "Nano" "nano" "false"
 test_file "Neovim config" ~/.config/nvim/init.lua "false"
-test_file "Vim config" ~/.vimrc "false"
 test_file "Nano config" ~/.nanorc "false"
 test_env "EDITOR variable" "EDITOR" ""
 test_env "VISUAL variable" "VISUAL" ""
 
 # Test editor swap directories
 echo -e "\n${BLUE}═══ Editor Data Directories ═══${NC}"
-test_file "Neovim swap (state)" ~/.local/state/nvim/swap "false"
-test_file "Neovim swap (share)" ~/.local/share/nvim/swap "false"
-test_file "Vim swap" ~/.local/share/vim/swap "false"
+
+# Detect Neovim version to test appropriate swap directory
+if command -v nvim &> /dev/null; then
+    NVIM_VERSION=$(nvim --version 2>/dev/null | head -1 | grep -oE 'v[0-9]+\.[0-9]+' | sed 's/v//')
+    NVIM_MAJOR=$(echo "$NVIM_VERSION" | cut -d. -f1)
+    NVIM_MINOR=$(echo "$NVIM_VERSION" | cut -d. -f2)
+    
+    if [ -n "$NVIM_VERSION" ] && ([ "$NVIM_MAJOR" -gt 0 ] || [ "$NVIM_MINOR" -ge 11 ]); then
+        # Neovim 0.11+ uses state directory
+        test_file "Neovim swap" ~/.local/state/nvim/swap "false"
+    else
+        # Neovim < 0.11 uses share directory
+        test_file "Neovim swap" ~/.local/share/nvim/swap "false"
+    fi
+else
+    # If neovim isn't installed, check the modern path
+    test_file "Neovim swap" ~/.local/state/nvim/swap "false"
+fi
 
 echo -e "\n${BLUE}═══ VSCode Configuration ═══${NC}"
 if [ "$OS_TYPE" = "macos" ]; then

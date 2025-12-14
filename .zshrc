@@ -84,6 +84,11 @@ else
     export VISUAL="vi"
 fi
 
+# Ensure homebrew nano takes precedence (if installed)
+if [ -x /opt/homebrew/bin/nano ]; then
+    alias nano="/opt/homebrew/bin/nano"
+fi
+
 # Navigation functions
 cx() { cd "$@" && l; }
 fcd() { cd "$(find . -type d -not -path '*/.*' | fzf)" && l; }

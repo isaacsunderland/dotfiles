@@ -1,21 +1,21 @@
 #!/bin/bash
 # Vim/Neovim Configuration Setup Script
-# Links configurations for both Vim and Neovim, with fallbacks
+# Prioritizes Neovim, falls back to Vim if Neovim not available
 # Works across macOS, Linux, Windows (WSL), and remote systems
 
 set -e
 
 DOTFILES_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-CONFIG_DIR="${DOTFILES_DIR%/*}/config"
+CONFIG_DIR="$DOTFILES_DIR/config"
 
-echo "Setting up Vim/Neovim configuration..."
+echo "Setting up editor configuration..."
 
 # ============================================================================
-# Neovim Configuration
+# Neovim Configuration (Primary)
 # ============================================================================
 
 if command -v nvim &> /dev/null; then
-    echo "✓ Neovim detected"
+    echo "✓ Neovim detected (primary editor)"
     
     # Create nvim config directory
     mkdir -p ~/.config/nvim
@@ -26,21 +26,24 @@ if command -v nvim &> /dev/null; then
         echo "  ✓ Linked init.lua"
     fi
     
-    # Also create init.vim as fallback (for older Neovim versions)
-    if [ -f "$CONFIG_DIR/vim/vimrc" ]; then
-        ln -sfv "$CONFIG_DIR/vim/vimrc" ~/.config/nvim/init.vim
-        echo "  ✓ Linked init.vim (fallback)"
+    # Remove init.vim if it exists to avoid conflicts
+    if [ -L ~/.config/nvim/init.vim ]; then
+        rm ~/.config/nvim/init.vim
+        echo "  ✓ Removed conflicting init.vim"
     fi
+    
+    USING_NVIM=true
 else
-    echo "ℹ Neovim not installed"
+    echo "ℹ Neovim not installed, will use Vim as primary editor"
+    USING_NVIM=false
 fi
 
 # ============================================================================
-# Vim Configuration
+# Vim Configuration (Fallback if Neovim not available)
 # ============================================================================
 
-if command -v vim &> /dev/null; then
-    echo "✓ Vim detected"
+if [ "$USING_NVIM" = false ] && command -v vim &> /dev/null; then
+    echo "✓ Vim detected (fallback editor)"
     
     # Create vim config directory
     mkdir -p ~/.vim
@@ -57,8 +60,10 @@ if command -v vim &> /dev/null; then
         ln -sfv "$CONFIG_DIR/vim/vimrc" ~/.config/vim/vimrc
         echo "  ✓ Linked ~/.config/vim/vimrc (XDG)"
     fi
-else
-    echo "ℹ Vim not installed"
+elif [ "$USING_NVIM" = false ]; then
+    echo "⚠ Neither Neovim nor Vim installed"
+    echo "  Install one with: brew install neovim (or vim)"
+    exit 1
 fi
 
 # ============================================================================
@@ -68,26 +73,41 @@ fi
 echo ""
 echo "Creating data directories..."
 
-# Neovim directories (both share and state for compatibility)
-# Neovim 0.11+ uses ~/.local/state, older versions use ~/.local/share
-mkdir -p ~/.local/share/nvim/{swap,backup,undo,shada}
-mkdir -p ~/.local/state/nvim/{swap,backup,undo,shada}
-chmod 700 ~/.local/share/nvim/{swap,backup,undo,shada} 2>/dev/null || true
-chmod 700 ~/.local/state/nvim/{swap,backup,undo,shada} 2>/dev/null || true
-
-# Fix ownership if directories exist but are owned by root (common issue)
-if [ -d ~/.local/state/nvim/swap ] && [ ! -w ~/.local/state/nvim/swap ]; then
-    echo "  Fixing ownership of ~/.local/state/nvim/swap (requires sudo)..."
-    sudo chown -R $USER ~/.local/state/nvim/swap 2>/dev/null || true
-    sudo chmod 700 ~/.local/state/nvim/swap 2>/dev/null || true
+# Detect Neovim version to determine appropriate directory structure
+NVIM_VERSION=""
+NVIM_MAJOR_VERSION=0
+if command -v nvim &> /dev/null; then
+    NVIM_VERSION=$(nvim --version | head -1 | grep -oE 'v[0-9]+\.[0-9]+' | sed 's/v//')
+    NVIM_MAJOR_VERSION=$(echo "$NVIM_VERSION" | cut -d. -f1)
+    NVIM_MINOR_VERSION=$(echo "$NVIM_VERSION" | cut -d. -f2)
 fi
 
-echo "✓ Neovim directories: ~/.local/{share,state}/nvim/{swap,backup,undo}"
+# Neovim 0.11+ uses ~/.local/state, older versions use ~/.local/share
+if [ -n "$NVIM_VERSION" ] && ([ "$NVIM_MAJOR_VERSION" -gt 0 ] || [ "$NVIM_MINOR_VERSION" -ge 11 ]); then
+    # Modern Neovim (0.11+)
+    mkdir -p ~/.local/state/nvim/{swap,backup,undo,shada}
+    chmod 700 ~/.local/state/nvim/{swap,backup,undo,shada} 2>/dev/null || true
+    
+    # Fix ownership if directories exist but are owned by root
+    if [ -d ~/.local/state/nvim/swap ] && [ ! -w ~/.local/state/nvim/swap ]; then
+        echo "  Fixing ownership of ~/.local/state/nvim/swap (requires sudo)..."
+        sudo chown -R $USER ~/.local/state/nvim/swap 2>/dev/null || true
+        sudo chmod 700 ~/.local/state/nvim/swap 2>/dev/null || true
+    fi
+    echo "✓ Neovim (v$NVIM_VERSION) directories: ~/.local/state/nvim/{swap,backup,undo}"
+else
+    # Legacy Neovim (pre-0.11)
+    mkdir -p ~/.local/share/nvim/{swap,backup,undo,shada}
+    chmod 700 ~/.local/share/nvim/{swap,backup,undo,shada} 2>/dev/null || true
+    echo "✓ Neovim directories: ~/.local/share/nvim/{swap,backup,undo}"
+fi
 
-# Vim directories
-mkdir -p ~/.local/share/vim/{swap,backup,undo}
-chmod 700 ~/.local/share/vim/{swap,backup,undo}
-echo "✓ Vim directories: ~/.local/share/vim/{swap,backup,undo}"
+# Vim swap directories - only if Vim is primary editor
+if [ "$USING_NVIM" = false ]; then
+    mkdir -p ~/.local/share/vim/{swap,backup,undo}
+    chmod 700 ~/.local/share/vim/{swap,backup,undo}
+    echo "✓ Vim directories: ~/.local/share/vim/{swap,backup,undo}"
+fi
 
 # ============================================================================
 # Verify Installation
@@ -100,41 +120,32 @@ if command -v nvim &> /dev/null; then
     NVIM_VERSION=$(nvim --version | head -n1)
     echo "✓ Neovim: $NVIM_VERSION"
     echo "  Config: ~/.config/nvim/init.lua"
-    # Check which directory nvim is actually using
     NVIM_SWAP_DIR=$(nvim --headless -c "echo &directory" -c "qa" 2>&1 | head -1 | sed 's|//||g')
     echo "  Swap: $NVIM_SWAP_DIR"
-else
-    echo "⚠ Neovim not found"
 fi
 
-if command -v vim &> /dev/null; then
+if command -v vim &> /dev/null && [ "$USING_NVIM" = false ]; then
     VIM_VERSION=$(vim --version | head -n1)
     echo "✓ Vim: $VIM_VERSION"
     echo "  Config: ~/.vimrc"
     echo "  Swap: ~/.local/share/vim/swap"
-else
-    echo "⚠ Vim not found"
 fi
 
 echo ""
-echo "✓ Vim/Neovim configuration complete!"
+echo "✓ Editor configuration complete!"
 echo ""
-echo "Editor Fallback Chain:"
-if command -v nvim &> /dev/null; then
-    echo "  ✓ Primary: neovim (nvim)"
+echo "Primary Editor:"
+if [ "$USING_NVIM" = true ]; then
+    echo "  ✓ Neovim (nvim)"
     echo "  ✓ Aliases: vim → nvim, vi → nvim"
-elif command -v vim &> /dev/null; then
-    echo "  ✓ Primary: vim"
-    echo "  ✓ Alias: vi → vim"
 else
-    echo "  ⚠ Fallback: vi (system default)"
+    echo "  ✓ Vim (vim)"
+    echo "  ✓ Alias: vi → vim"
 fi
 echo ""
 echo "Environment Variables:"
-if command -v nvim &> /dev/null; then
+if [ "$USING_NVIM" = true ]; then
     echo "  EDITOR=nvim, VISUAL=nvim"
-elif command -v vim &> /dev/null; then
-    echo "  EDITOR=vim, VISUAL=vim"
 else
-    echo "  EDITOR=vi, VISUAL=vi"
+    echo "  EDITOR=vim, VISUAL=vim"
 fi
