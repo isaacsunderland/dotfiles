@@ -13,7 +13,6 @@ defaults write com.apple.spaces spans-displays -bool false
 defaults write com.apple.dock autohide -bool true
 defaults write com.apple.dock mru-spaces -bool false
 defaults write com.apple.dock static-only -bool true
-defaults write com.apple.dock wvous-bl-corner -int 13
 defaults write com.apple.dock tilesize -int 24
 defaults write com.apple.dock show-recents -bool false
 defaults write com.apple.dock showhidden -bool true
@@ -35,6 +34,20 @@ defaults write NSGlobalDomain NSWindowShouldDragOnGesture -bool true
 defaults write NSGlobalDomain AppleShowAllFiles -bool true
 defaults write NSGlobalDomain AppleFontSmoothing -int 2
 defaults write NSGlobalDomain "com.apple.trackpad.trackpadCornerClickBehavior" -int 1
+defaults write NSGlobalDomain AppleShowScrollBars -string "Always"
+
+# Trackpad settings
+defaults write com.apple.AppleMultitouchTrackpad TrackpadCornerSecondaryClick -int 2
+defaults write com.apple.driver.AppleBluetoothMultitouch.trackpad TrackpadCornerSecondaryClick -int 2
+
+# Window Manager settings
+defaults write com.apple.WindowManager EnableStandardClickToShowDesktop -bool false
+defaults write com.apple.WindowManager StandardHideDesktopIcons -bool true
+defaults write com.apple.WindowManager StandardHideWidgets -bool true
+
+# Menu bar clock settings
+defaults write com.apple.menuextra.clock ShowAMPM -bool true
+defaults write com.apple.menuextra.clock ShowDayOfWeek -bool true
 
 # Screenshot settings
 defaults write com.apple.screencapture location ~/Pictures/screenshots
@@ -49,6 +62,11 @@ defaults write com.apple.LaunchServices LSQuarantine -bool false
 
 # Screensaver
 defaults write com.apple.screensaver askForPassword -bool false
+defaults -currentHost write com.apple.screensaver idleTime -int 3600  # Start screen saver after 1 hour of inactivity
+
+# Display sleep settings (using pmset)
+sudo pmset -b displaysleep 30  # Turn off display on battery after 30 minutes
+sudo pmset -c displaysleep 135   # Turn off display on power adapter after 135 minutes
 
 # Touch ID for sudo
 echo "Configuring Touch ID for sudo..."
@@ -68,14 +86,7 @@ echo "Remapping Caps Lock to Escape..."
 # Get the ID of the built-in keyboard
 KEYBOARD_ID=$(ioreg -r -n IOHIDKeyboard -d 1 | grep -E '(VendorID|ProductID)' | awk 'NR==1{v=$NF} NR==2{print v"-"$NF}')
 
-if [ -n "$KEYBOARD_ID" ]; then
-    # Set Caps Lock (key code 0) to Escape (key code 30064771113)
-    defaults -currentHost write -g com.apple.keyboard.modifiermapping.$KEYBOARD_ID -array '<dict><key>HIDKeyboardModifierMappingDst</key><integer>30064771113</integer><key>HIDKeyboardModifierMappingSrc</key><integer>30064771129</integer></dict>'
-    echo "✓ Caps Lock remapped to Escape"
-else
-    echo "⚠️  Could not detect keyboard ID for Caps Lock remapping"
-    echo "   You can remap manually: System Settings → Keyboard → Modifier Keys"
-fi
+
 
 echo "Finished configuring macOS defaults."
 echo "Note: Some changes may require a restart or logout to take effect."

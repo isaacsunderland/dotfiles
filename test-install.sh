@@ -224,31 +224,44 @@ echo -e "\n${BLUE}═══ Terminal Configuration ═══${NC}"
 test_file "Kitty config" ~/.config/kitty/kitty.conf "false"
 test_file "Starship config" ~/.config/starship.toml "false"
 
-echo -e "\n${BLUE}═══ Shell Aliases ═══${NC}"
-# Source the shell config to test aliases
+echo -e "\n${BLUE}═══ Shell Configuration Functions ═══${NC}"
+# Source the shell config to test functions
 if [ -f ~/.zshrc ] && [ "$SHELL" = *"zsh"* ]; then
     source ~/.zshrc 2>/dev/null || true
 elif [ -f ~/.bashrc ]; then
     source ~/.bashrc 2>/dev/null || true
 fi
 
-# Test if aliases are set
-check_alias() {
-    if alias $1 &> /dev/null; then
-        local target=$(alias $1 | sed "s/^[^=]*='\(.*\)'$/\1/" | sed 's/^alias [^=]*=//')
-        echo -e "${GREEN}✓${NC} Alias '$1': ${GREEN}SET${NC} → $target"
+# Test if functions/aliases are set
+check_function() {
+    if type $1 &> /dev/null; then
+        if alias $1 &> /dev/null; then
+            local target=$(alias $1 | sed "s/^[^=]*='\(.*\)'$/\1/" | sed 's/^alias [^=]*=//')
+            echo -e "${GREEN}✓${NC} Alias '$1': ${GREEN}SET${NC} → $target"
+        else
+            echo -e "${GREEN}✓${NC} Function '$1': ${GREEN}AVAILABLE${NC}"
+        fi
         ((PASSED++))
     else
-        echo -e "${YELLOW}⊘${NC} Alias '$1': ${YELLOW}NOT SET${NC}"
+        echo -e "${YELLOW}⊘${NC} Function '$1': ${YELLOW}NOT SET${NC}"
         ((SKIPPED++))
     fi
 }
 
-check_alias "l"
-check_alias "ll"
-check_alias "la"
-check_alias "vim"
-check_alias "vi"
+check_function "l"
+check_function "ll"
+check_function "la"
+check_function "vim"
+check_function "vi"
+
+# Show cheatsheet availability
+if type cheatsheet &> /dev/null; then
+    echo -e "${GREEN}✓${NC} Cheatsheet: ${GREEN}AVAILABLE${NC} (run 'cheatsheet' for help)"
+    ((PASSED++))
+else
+    echo -e "${YELLOW}⊘${NC} Cheatsheet: ${YELLOW}NOT AVAILABLE${NC}"
+    ((SKIPPED++))
+fi
 
 echo -e "\n${BLUE}═══ macOS Specific (if applicable) ═══${NC}"
 if [ "$OS_TYPE" = "macos" ]; then

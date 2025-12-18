@@ -9,6 +9,13 @@ fi
 # Set PATH
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
+# Use uutils-coreutils instead of macOS/BSD coreutils for cross-platform compatibility
+if command -v brew &> /dev/null; then
+    if [ -d "$(brew --prefix uutils-coreutils 2>/dev/null)/libexec/uubin" ]; then
+        export PATH="$(brew --prefix uutils-coreutils)/libexec/uubin:$PATH"
+    fi
+fi
+
 # History settings
 export HISTSIZE=10000
 export HISTFILESIZE=10000
@@ -93,6 +100,48 @@ fi
 alias ..="cd .."
 alias ...="cd ../.."
 alias ....="cd ../../.."
+
+# Homebrew maintenance aliases
+if command -v brew &> /dev/null; then
+    alias brew-check="brew update && brew outdated"
+    alias brew-doctor="brew doctor"
+    
+    # Monthly automatic update check
+    BREW_UPDATE_TRACKER="$HOME/.brew_last_update"
+    
+    # Function to check if brew needs monthly update
+    _check_monthly_brew_update() {
+        local current_month=$(date +%Y-%m)
+        local last_update_month=""
+        
+        if [ -f "$BREW_UPDATE_TRACKER" ]; then
+            last_update_month=$(cat "$BREW_UPDATE_TRACKER")
+        fi
+        
+        if [ "$current_month" != "$last_update_month" ]; then
+            echo "🔔 Monthly Homebrew update available!"
+            echo "   Run 'brew-update' to update all packages"
+            echo "   Or 'brew-check' to see what's outdated"
+            echo "   (Skip with: touch $BREW_UPDATE_TRACKER && echo $current_month > $BREW_UPDATE_TRACKER)"
+            echo ""
+        fi
+    }
+    
+    # Run check on shell startup (only once per session)
+    if [ -z "$BREW_UPDATE_CHECK_DONE" ]; then
+        _check_monthly_brew_update
+        export BREW_UPDATE_CHECK_DONE=1
+    fi
+    
+    # Function version of brew-update to mark update as done
+    brew-update() {
+        command brew update && command brew upgrade && command brew cleanup && command brew autoremove
+        if [ $? -eq 0 ]; then
+            date +%Y-%m > "$BREW_UPDATE_TRACKER"
+            echo "✅ Update tracker updated: $(cat $BREW_UPDATE_TRACKER)"
+        fi
+    }
+fi
 
 # Navigation functions
 cx() { cd "$@" && l; }
@@ -201,3 +250,6 @@ CNPG_EOF
         fi
     fi
 fi
+
+# Microsoft Terminal Notifications
+[ -f "/Users/isaacsunderland/.config/ms-terminal-notif/shell-integration.sh" ] && source "/Users/isaacsunderland/.config/ms-terminal-notif/shell-integration.sh"

@@ -80,6 +80,7 @@ echo "Creating config directories..."
 mkdir -p ~/.config/kitty
 mkdir -p ~/.config/starship
 mkdir -p ~/.config/zsh
+mkdir -p ~/.config/tealdeer
 mkdir -p ~/.local/bin
 
 # 4. Link config files (skip on remote-console, only link if available)
@@ -87,6 +88,10 @@ echo "Linking configuration files..."
 if [ "$OS_TYPE" != "remote-console" ] && [ "$OS_TYPE" != "remote-windows" ]; then
     ln -sfv "$DOTFILES_DIR/config/kitty/kitty.conf" ~/.config/kitty/
     ln -sfv "$DOTFILES_DIR/config/starship.toml" ~/.config/starship.toml
+    # tealdeer (tldr) configuration
+    if [ -f "$DOTFILES_DIR/config/tealdeer/config.toml" ]; then
+        ln -sfv "$DOTFILES_DIR/config/tealdeer/config.toml" ~/.config/tealdeer/config.toml
+    fi
     ln -sfv "$DOTFILES_DIR/.zshrc" ~/.zshrc
     
     # Setup Vim/Neovim configuration

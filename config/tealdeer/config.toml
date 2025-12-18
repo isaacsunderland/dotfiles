@@ -1,0 +1,10 @@
+# tealdeer (tldr client) configuration
+# See: https://dbrgn.github.io/tealdeer/configuration/
+# Auto-update the cached pages periodically
+auto_update = true
+
+# Optionally, choose a theme (uncomment to use)
+# theme = "base16-ocean"
+
+# Show a compact output when possible
+# compact = true
