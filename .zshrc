@@ -12,7 +12,7 @@ zstyle ':completion:*' matcher-list 'm:{a-z}={A-Za-z}'
 autoload bashcompinit && bashcompinit
 
 # Set PATH
-export PATH="/opt/homebrew/bin:$PATH"
+export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
 
 # Use uutils-coreutils instead of macOS/BSD coreutils for cross-platform compatibility
 if [ -d "$(brew --prefix uutils-coreutils 2>/dev/null)/libexec/uubin" ]; then
@@ -93,22 +93,21 @@ alias ....="cd ../../.."
 
 # Homebrew maintenance aliases
 if command -v brew &> /dev/null; then
-    alias brew-update="brew update && brew upgrade && brew cleanup && brew autoremove"
     alias brew-check="brew update && brew outdated"
     alias brew-doctor="brew doctor"
-    
+
     # Monthly automatic update check
     BREW_UPDATE_TRACKER="$HOME/.brew_last_update"
-    
+
     # Function to check if brew needs monthly update
     _check_monthly_brew_update() {
         local current_month=$(date +%Y-%m)
         local last_update_month=""
-        
+
         if [ -f "$BREW_UPDATE_TRACKER" ]; then
             last_update_month=$(cat "$BREW_UPDATE_TRACKER")
         fi
-        
+
         if [ "$current_month" != "$last_update_month" ]; then
             echo "🔔 Monthly Homebrew update available!"
             echo "   Run 'brew-update' to update all packages"
@@ -117,13 +116,13 @@ if command -v brew &> /dev/null; then
             echo ""
         fi
     }
-    
+
     # Run check on shell startup (only once per session)
     if [ -z "$BREW_UPDATE_CHECK_DONE" ]; then
         _check_monthly_brew_update
         export BREW_UPDATE_CHECK_DONE=1
     fi
-    
+
     # Wrap brew-update to mark update as done
     brew-update() {
         command brew update && command brew upgrade && command brew cleanup && command brew autoremove
@@ -158,7 +157,7 @@ fi
 cx() { cd "$@" && l; }
 fcd() { cd "$(find . -type d -not -path '*/.*' | fzf)" && l; }
 f() { echo "$(find . -type f -not -path '*/.*' | fzf)" | pbcopy }
-fv() { 
+fv() {
     local file="$(find . -type f -not -path '*/.*' | fzf)"
     if [ -n "$file" ]; then
         $EDITOR "$file"
@@ -238,7 +237,7 @@ CHEATSHEET
     if command -v zoxide &> /dev/null; then
         echo "║    • zoxide (smart cd replacement)                              ║"
     fi
-    
+
     cat << 'CHEATSHEET_END'
 ║                                                                      ║
 ║  TIP: Install modern tools with:                                    ║
@@ -252,7 +251,7 @@ CHEATSHEET_END
 if command -v kubectl &> /dev/null; then
     # Enable kubectl completion for zsh
     source <(kubectl completion zsh)
-    
+
     # CloudNativePG (CNPG) kubectl plugin completion
     if command -v kubectl-cnpg &> /dev/null; then
         # Generate and install kubectl cnpg completion helper
@@ -263,7 +262,7 @@ if command -v kubectl &> /dev/null; then
 kubectl cnpg __complete "$@"
 CNPG_EOF
             chmod +x /tmp/kubectl_complete-cnpg
-            
+
             # Try to install to /usr/local/bin first, then homebrew bin
             if [ -w /usr/local/bin ]; then
                 mv /tmp/kubectl_complete-cnpg /usr/local/bin/
@@ -276,5 +275,3 @@ CNPG_EOF
     fi
 fi
 
-# Microsoft Terminal Notifications
-[ -f "/Users/isaacsunderland/.config/ms-terminal-notif/shell-integration.sh" ] && source "/Users/isaacsunderland/.config/ms-terminal-notif/shell-integration.sh"

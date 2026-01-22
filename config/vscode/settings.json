@@ -13,7 +13,7 @@
   "git.confirmSync": false,
   "hediet.vscode-drawio.resizeImages": null,
   "markdown-preview-enhanced.previewTheme": "monokai.css",
-  "markdown-preview-enhanced.revealjsTheme": "moon.css",
+  "markdown-preview-enhanced.revealjsTheme": "beige.css",
   "markdown-preview-enhanced.enablePreviewZenMode": true,
   "markdown-preview-enhanced.pandocArguments": [],
   "markdown-preview-enhanced.usePandocParser": true,
@@ -93,5 +93,8 @@
   },
   "editor.fontFamily": "'Meslo LG M Nerd Font', 'FiraCode Nerd Font', monospace",
   "editor.fontLigatures": true,
-  "terminal.integrated.fontFamily": "'Meslo LG M Nerd Font', 'FiraCode Nerd Font', monospace"
+  "terminal.integrated.fontFamily": "'Meslo LG M Nerd Font', 'FiraCode Nerd Font', monospace",
+  "python.defaultInterpreterPath": "/opt/homebrew/bin/python3.13",
+  "chat.checkpoints.showFileChanges": true,
+  "chat.viewSessions.orientation": "stacked"
 }

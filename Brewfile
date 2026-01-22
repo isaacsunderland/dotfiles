@@ -21,13 +21,21 @@ brew "k9s"          # Kubernetes TUI
 brew "kind"         # Kubernetes in Docker
 brew "pinentry-mac" # macOS pinentry for GPG
 brew "navi"         # Interactive cheatsheets (fzf-powered)
+brew "jq"           # JSON query and transformation
+brew "gh"           # GitHub CLI
+brew "helm"         # Kubernetes package manager
+brew "node"         # JavaScript runtime
 
 # Optional brews - uncomment if needed
 # brew "kafka"
+brew "awscli"       # AWS command line
+brew "azure-cli"    # Azure command line
+# brew "postgresql@15" # PostgreSQL database (if needed)
+# brew "yq"          # YAML query tool
+# brew "wget"        # URL download tool
 
 # Casks (Applications)
 cask "google-chrome"
-cask "microsoft-remote-desktop"
 cask "bitwarden"
 cask "docker-desktop"
 cask "openvpn-connect"
@@ -45,4 +53,5 @@ cask "font-meslo-lg-nerd-font"
 
 # Optional casks - uncomment if needed
 # cask "omnissa-horizon-client"
-# cask "github"
+cask "shottr"       # Screenshot tool
+cask "github"
