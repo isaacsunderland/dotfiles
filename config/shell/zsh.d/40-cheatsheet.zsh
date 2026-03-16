@@ -42,6 +42,17 @@ cheatsheet() {
 |  ....            cd ../../../                                     |
 |  z <dir>         Jump to directory (zoxide)                       |
 |                                                                    |
+|  GIT EXPLORE WORKTREE                                              |
+|  ----------------------------------------------------------------  |
+|  explore --help  Show explore command help/options                |
+|  explore start   Create/open isolated explore worktree            |
+|  explore-start   Create/open isolated explore worktree            |
+|  explore-list    List active explore worktrees                    |
+|  explore-resume  Reopen existing explore worktree                 |
+|  explore-stop    Remove explore worktree (use --force to discard) |
+|  explore doctor  Diagnose explore branch/worktree safety/state    |
+|  explore save-notes Save ai/EXPLORE.md into repo ai/EXPLORE.md    |
+|                                                                    |
 |  INSTALLED TOOLS                                                   |
 |  ----------------------------------------------------------------  |
 |  AVAILABLE:                                                        |

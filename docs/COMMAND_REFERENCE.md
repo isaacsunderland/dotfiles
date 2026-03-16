@@ -60,6 +60,66 @@ source ~/.shell_profile_windows_remote
 source ~/.env_windows_remote
 ```
 
+## Git Explore Worktree
+
+Use an isolated worktree for experimentation without touching your active branch workspace.
+
+### Start Explore Worktree
+```bash
+explore-start
+explore start
+```
+Creates (or reuses) an explore branch/worktree and opens it in VS Code.
+By default the branch is named from your current branch, e.g. `explore-main` or `explore-feature-login`.
+
+### Explore Help
+```bash
+explore --help
+explore help
+```
+Shows all available explore commands and environment options.
+
+### List Explore Worktrees
+```bash
+explore-list
+explore list
+```
+
+### Reopen Explore Worktree
+```bash
+explore-resume
+explore resume
+```
+
+### Stop Explore Worktree
+```bash
+explore-stop
+explore-stop --force
+explore stop
+explore stop --force
+```
+Removes the explore worktree. Use `--force` to discard uncommitted explore changes.
+If `ai/EXPLORE.md` in the explore worktree is non-empty, you will be prompted to save it first.
+
+### Save Explore Notes
+```bash
+explore save-notes
+```
+Appends notes from the explore worktree `ai/EXPLORE.md` into your main repo `ai/EXPLORE.md` with a timestamped heading.
+
+### Diagnose Explore State
+```bash
+explore doctor
+```
+Runs checks for branch/worktree state, cleanliness, and commit-guard hook presence.
+
+### Local Ignore Behavior
+Explore-only artifacts are intentionally ignored locally (not committed to project `.gitignore`):
+- `ai/`
+- `.githooks/`
+
+The helper writes these patterns to local Git excludes at `.git/info/exclude` (common git dir), so they stay private to your clone.
+
 ## Configuration Management
 
 ### Update Shell Configuration
