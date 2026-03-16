@@ -175,3 +175,7 @@ CNPG_EOF
         echo "Warning: Could not install kubectl_complete-cnpg. Ensure /usr/local/bin or /opt/homebrew/bin is writable."
     fi
 }
+# Git explore worktree helpers
+if [ -f "$HOME/.config/shell/explore.sh" ]; then
+    source "$HOME/.config/shell/explore.sh"
+fi
