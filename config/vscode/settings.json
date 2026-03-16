@@ -26,7 +26,7 @@
   "markdown-mermaid.darkModeTheme": "forest",
   "markdown-preview-enhanced.mermaidTheme": "dark",
   "github.copilot.enable": {
-    "markdown": "false"
+    "markdown": true
   },
   "explorer.confirmDelete": false,
   "foam.files.ignore": [],
@@ -96,5 +96,5 @@
   "terminal.integrated.fontFamily": "'Meslo LG M Nerd Font', 'FiraCode Nerd Font', monospace",
   "python.defaultInterpreterPath": "/opt/homebrew/bin/python3.13",
   "chat.checkpoints.showFileChanges": true,
-  "chat.viewSessions.orientation": "stacked"
+  "chat.viewSessions.orientation": "stacked",
 }

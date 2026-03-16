@@ -80,6 +80,7 @@ echo "Creating config directories..."
 mkdir -p ~/.config/kitty
 mkdir -p ~/.config/starship
 mkdir -p ~/.config/zsh
+mkdir -p ~/.config/shell
 mkdir -p ~/.config/tealdeer
 mkdir -p ~/.local/bin
 
@@ -88,11 +89,13 @@ echo "Linking configuration files..."
 if [ "$OS_TYPE" != "remote-console" ] && [ "$OS_TYPE" != "remote-windows" ]; then
     ln -sfv "$DOTFILES_DIR/config/kitty/kitty.conf" ~/.config/kitty/
     ln -sfv "$DOTFILES_DIR/config/starship.toml" ~/.config/starship.toml
+    ln -sfn "$DOTFILES_DIR/config/shell" ~/.config/shell
     # tealdeer (tldr) configuration
     if [ -f "$DOTFILES_DIR/config/tealdeer/config.toml" ]; then
         ln -sfv "$DOTFILES_DIR/config/tealdeer/config.toml" ~/.config/tealdeer/config.toml
     fi
     ln -sfv "$DOTFILES_DIR/.zshrc" ~/.zshrc
+    ln -sfv "$DOTFILES_DIR/.bashrc" ~/.bashrc
     
     # Setup Vim/Neovim configuration
     echo "Setting up Vim/Neovim configuration..."
@@ -103,6 +106,7 @@ if [ "$OS_TYPE" != "remote-console" ] && [ "$OS_TYPE" != "remote-windows" ]; the
     bash "$DOTFILES_DIR/setup-vscode.sh"
 else
     echo "Remote environment detected - linking shell configs only"
+    ln -sfn "$DOTFILES_DIR/config/shell" ~/.config/shell
     ln -sfv "$DOTFILES_DIR/.zshrc" ~/.zshrc
     ln -sfv "$DOTFILES_DIR/.bashrc" ~/.bashrc
     
@@ -128,12 +132,21 @@ if command -v zsh &> /dev/null; then
             chsh -s "$(command -v zsh)" 2>/dev/null || echo "Note: Could not change shell (may require manual intervention)"
         fi
     fi
-elif command -v bash &> /dev/null; then
+elif [ -x /opt/homebrew/bin/bash ] || [ -x /usr/local/bin/bash ] || command -v bash &> /dev/null; then
     SHELL_NAME="bash"
+    BASH_PATH=""
+    if [ -x /opt/homebrew/bin/bash ]; then
+        BASH_PATH="/opt/homebrew/bin/bash"
+    elif [ -x /usr/local/bin/bash ]; then
+        BASH_PATH="/usr/local/bin/bash"
+    else
+        BASH_PATH="$(command -v bash)"
+    fi
+
     if [ "$OS_TYPE" != "windows" ] && [ "$OS_TYPE" != "remote-windows" ]; then
-        if [ "$SHELL" != "/bin/bash" ] && [ "$SHELL" != "$(command -v bash)" ]; then
-            echo "zsh not available, setting shell to bash..."
-            chsh -s "$(command -v bash)" 2>/dev/null || echo "Note: Could not change shell (may require manual intervention)"
+        if [ "$SHELL" != "$BASH_PATH" ]; then
+            echo "zsh not available, setting shell to bash ($BASH_PATH)..."
+            chsh -s "$BASH_PATH" 2>/dev/null || echo "Note: Could not change shell (may require manual intervention)"
         fi
     fi
 else

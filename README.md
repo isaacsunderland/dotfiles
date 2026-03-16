@@ -266,7 +266,15 @@ brew bundle --file=./Brewfile
 ```
 
 ### Modify shell configuration
-Edit `.zshrc` directly in the dotfiles root. Changes take effect in new terminal sessions.
+`.zshrc` and `.bashrc` are lightweight loaders. Shared helpers live in `config/shell/`.
+
+- `config/shell/common.sh` for shared zsh/bash functions and aliases
+- `config/shell/zsh.sh` as a zsh loader for files in `config/shell/zsh.d/`
+- `config/shell/bash.sh` for bash-only behavior
+
+On macOS, Homebrew bash is preferred automatically (`/opt/homebrew/bin/bash` or `/usr/local/bin/bash`) and falls back to system bash when unavailable.
+
+Changes take effect in new terminal sessions.
 
 ### Adjust macOS defaults
 Edit `macos-defaults.sh` and run:
