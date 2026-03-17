@@ -109,7 +109,7 @@ Output markdown with these sections:
 Exploration log:
 $(cat "$explore_file")
 
-Output ONLY the markdown sections (no explanations, no heading)." --allow-all-tools 2>&1 | sed '/^Total usage/,$ d' || echo "")
+Output ONLY the markdown sections (no explanations, no heading)." 2>&1 | sed '/^Total usage/,$ d' || echo "")
             else
                 spec_content=$(copilot -p "Read the exploration log below and extract a specification document.
 
@@ -132,7 +132,7 @@ Output markdown with these sections:
 Exploration log:
 $(cat "$explore_file")
 
-Output ONLY the markdown sections (no explanations, no heading)." --allow-all-tools 2>&1 | sed '/^Total usage/,$ d' || echo "")
+Output ONLY the markdown sections (no explanations, no heading)." 2>&1 | sed '/^Total usage/,$ d' || echo "")
             fi
             
             if [ -n "$spec_content" ] && [ "$(echo "$spec_content" | wc -w)" -gt 10 ]; then
@@ -240,7 +240,7 @@ Output markdown with:
 Exploration log:
 $(cat "$explore_file")
 
-Output ONLY the markdown sections." --allow-all-tools 2>&1 | sed '/^Total usage/,$ d' || echo "")
+Output ONLY the markdown sections." 2>&1 | sed '/^Total usage/,$ d' || echo "")
             else
                 plan_content=$(copilot -p "Read the exploration log and create a plan document.
 
@@ -263,7 +263,7 @@ Output markdown with:
 Exploration log:
 $(cat "$explore_file")
 
-Output ONLY the markdown sections." --allow-all-tools 2>&1 | sed '/^Total usage/,$ d' || echo "")
+Output ONLY the markdown sections." 2>&1 | sed '/^Total usage/,$ d' || echo "")
             fi
             
             if [ -n "$plan_content" ] && [ "$(echo "$plan_content" | wc -w)" -gt 10 ]; then
@@ -363,7 +363,7 @@ Output format:
 Exploration log:
 $(cat "$explore_file")
 
-Output ONLY the ## Backlog section with tasks." --allow-all-tools 2>&1 | sed '/^Total usage/,$ d' || echo "")
+Output ONLY the ## Backlog section with tasks." 2>&1 | sed '/^Total usage/,$ d' || echo "")
             else
                 tasks_content=$(copilot -p "Read the exploration log and create a task list.
 
@@ -381,7 +381,7 @@ Output format:
 Exploration log:
 $(cat "$explore_file")
 
-Output ONLY the ## Backlog section with tasks." --allow-all-tools 2>&1 | sed '/^Total usage/,$ d' || echo "")
+Output ONLY the ## Backlog section with tasks." 2>&1 | sed '/^Total usage/,$ d' || echo "")
             fi
             
             if [ -n "$tasks_content" ] && [ "$(echo "$tasks_content" | wc -w)" -gt 10 ]; then
@@ -659,7 +659,7 @@ Rules:
 
 After implementation:
 - Confirm when complete or report blockers
-- Show what files were changed" --allow-all-tools
+- Show what files were changed"
         else
             copilot -p "You are a worker agent executing a single task.
 
@@ -680,7 +680,7 @@ Rules:
 
 After implementation:
 - Confirm when complete or report blockers
-- Show what files were changed" --allow-all-tools
+- Show what files were changed"
         fi
         
         echo ""
@@ -887,7 +887,7 @@ Output format:
 ✅ PASS or ❌ FAIL
 - List specific issues found (if any)
 - Suggest fixes for any problems
-- Confirm if ready to commit or needs revision" --allow-all-tools
+- Confirm if ready to commit or needs revision"
     else
         copilot -p "You are a validation agent reviewing code changes.
 
@@ -911,7 +911,7 @@ Output format:
 ✅ PASS or ❌ FAIL
 - List specific issues found (if any)
 - Suggest fixes for any problems
-- Confirm if ready to commit or needs revision" --allow-all-tools
+- Confirm if ready to commit or needs revision"
     fi
     
     echo ""
