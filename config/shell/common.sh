@@ -1,5 +1,55 @@
 # Shared shell helpers for both zsh and bash.
 
+_sanitize_path_entries() {
+    local path_in path_out old_ifs entry
+
+    path_in="$PATH"
+    path_out=""
+    old_ifs="$IFS"
+    IFS=':'
+
+    for entry in $path_in; do
+        case "$entry" in
+            ''|oci://*)
+                continue
+                ;;
+        esac
+
+        if [ -z "$path_out" ]; then
+            path_out="$entry"
+        else
+            path_out="$path_out:$entry"
+        fi
+    done
+
+    IFS="$old_ifs"
+    export PATH="$path_out"
+}
+
+_sanitize_path_entries
+
+_ensure_default_system_path_entries() {
+    local default_entry
+
+    for default_entry in /usr/bin /bin /usr/sbin /sbin; do
+        case ":$PATH:" in
+            *":$default_entry:"*)
+                ;;
+            *)
+                if [ -n "$PATH" ]; then
+                    PATH="$PATH:$default_entry"
+                else
+                    PATH="$default_entry"
+                fi
+                ;;
+        esac
+    done
+
+    export PATH
+}
+
+_ensure_default_system_path_entries
+
 # PATH defaults
 if [ -d /opt/homebrew/bin ]; then
     export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
@@ -7,6 +57,9 @@ fi
 if [ -d /usr/local/bin ]; then
     export PATH="/usr/local/bin:$PATH"
 fi
+
+_sanitize_path_entries
+_ensure_default_system_path_entries
 
 # Prefer Homebrew bash for interactive `bash ...` calls.
 if [ -x /opt/homebrew/bin/bash ]; then
@@ -178,4 +231,9 @@ CNPG_EOF
 # Git explore worktree helpers
 if [ -f "$HOME/.config/shell/explore.sh" ]; then
     source "$HOME/.config/shell/explore.sh"
+fi
+
+# Ralph execution loop helpers
+if [ -f "$HOME/.config/shell/ralph.sh" ]; then
+    source "$HOME/.config/shell/ralph.sh"
 fi

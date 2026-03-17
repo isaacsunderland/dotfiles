@@ -100,6 +100,23 @@ source ~/.env_windows_remote
 
 ## Utility Scripts
 
+### Dual-Worktree Development
+
+#### Explore (Experimentation)
+- `explore start` - Create explore worktree (opens VS Code)
+- `explore start --cli` - Create explore worktree (CLI-only)
+- `explore prompt` - Display Copilot CLI prompt
+- `explore resume` - Reopen in VS Code
+- `explore save-notes` - Export findings to main repo
+- `explore stop` - Clean up worktree
+- `explore doctor` - Verify worktree health
+
+#### Ralph (Deterministic Execution)
+- `ralph init` - Set up ai/ directory structure
+- `ralph loop` - Interactive task execution
+- `ralph task` - Show next task
+- `ralph status` - Check progress
+
 ### Remote Console
 - `sysload` - Display system load, CPU, memory, disk
 - `tree` - Show directory tree

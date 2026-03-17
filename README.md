@@ -60,6 +60,10 @@ dotfiles/
 │   ├── SWAP_FILE_FIX.md          # Troubleshooting
 │   └── ... (more docs)
 ├── config/                       # Configuration files
+│   ├── shell/
+│   │   ├── common.sh             # Shared shell helpers
+│   │   ├── explore.sh            # Git explore worktree tool
+│   │   └── ralph.sh              # Ralph execution loop tool
 │   ├── kitty/
 │   │   └── kitty.conf            # Kitty terminal config
 │   ├── nvim/
@@ -211,6 +215,62 @@ Terminal settings:
 
 ### Starship (starship.toml)
 Custom prompt configuration with Git status, command duration, and language info.
+
+## Dual-Worktree Development Workflow
+
+**New**: Powerful git worktree tools for separating exploration from execution.
+
+### Tools
+
+- **`explore`** - Exploration worktree manager
+  - `explore start` - Create isolated worktree for experimentation (opens VS Code)
+  - `explore start --cli` - Create worktree for CLI-only workflow
+  - `explore prompt` - Generate/display Copilot CLI prompt
+  - `explore resume` - Reopen existing explore worktree in VS Code
+  - `explore save-notes` - Export findings to main repo
+  - `explore stop` - Clean up with safety checks
+  - `explore doctor` - Verify worktree health
+
+- **`ralph`** - Deterministic execution loop manager
+  - `ralph init` - Set up ai/ directory structure
+  - `ralph loop` - Interactive task execution with Copilot CLI
+  - `ralph task` - Show next unchecked task
+  - `ralph status` - View progress and stats
+  - `ralph commit` - Auto-mark tasks complete
+
+### Quick Example
+
+```bash
+# Create exploration worktree
+cd ~/prj/myproject
+explore start           # Opens in VS Code with purple theme
+# OR
+explore start --cli     # CLI-only mode, shows prompt
+
+# In explore worktree: experiment, chat with Copilot, break things
+# VS Code: Use Copilot chat
+# CLI: Use `explore prompt` for context
+# Document findings in ai/EXPLORE.md
+
+explore save-notes      # Export discoveries
+explore stop            # Clean up
+
+# Back in main worktree: formalize into execution plan
+ralph init              # Set up ai/SPEC.md, ai/PLAN.md, ai/TASKS.md
+# Edit task list...
+
+ralph loop              # Execute tasks with Copilot CLI automation
+```
+
+### Key Features
+
+- **Physical separation** - Different directories prevent exploration leaking into production
+- **Safety guards** - Pre-commit hooks prevent accidental commits in explore worktree
+- **Privacy** - ai/ excluded via .git/info/exclude (local to your machine)
+- **Visual distinction** - Purple VS Code theme for explore worktree
+- **Incremental execution** - Ralph loop processes one task at a time with fresh context
+
+**📚 Full documentation**: See `~/prj/notes/notes/dual-worktree-workflow.md` after installation
 
 ## Packages Installed
 

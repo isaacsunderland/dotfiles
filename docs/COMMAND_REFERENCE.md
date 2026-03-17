@@ -67,10 +67,38 @@ Use an isolated worktree for experimentation without touching your active branch
 ### Start Explore Worktree
 ```bash
 explore-start
-explore start
+explore start              # Opens in VS Code (default)
+explore start --cli        # CLI-only mode (no VS Code)
 ```
-Creates (or reuses) an explore branch/worktree and opens it in VS Code.
+Creates (or reuses) an explore branch/worktree. 
+- Default: Opens in VS Code with purple theme
+- `--cli`: Skips VS Code, displays Copilot CLI prompt
+
 By default the branch is named from your current branch, e.g. `explore-main` or `explore-feature-login`.
+
+### Generate/Display Copilot CLI Prompt
+```bash
+explore prompt
+```
+Generates and displays a context-rich prompt for Copilot CLI with current exploration log.
+
+### Typical CLI Workflow
+```bash
+explore start --cli        # Create worktree, show prompt
+cd ../.explore-myproject   # Navigate to explore worktree
+explore prompt             # View/refresh context
+# ... make changes, document in ai/EXPLORE.md ...
+explore save-notes         # Export to main repo
+explore stop               # Clean up
+```
+
+### Typical VS Code Workflow  
+```bash
+explore start              # Opens VS Code automatically
+# ... use Copilot chat, edit in purple-themed window ...
+explore save-notes         # Export to main repo
+explore stop               # Clean up
+```
 
 ### Explore Help
 ```bash

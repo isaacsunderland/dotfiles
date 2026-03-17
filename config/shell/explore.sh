@@ -44,7 +44,17 @@ _git_root() {
 
 # Derive a short, filesystem-safe repo name (directory name)
 _repo_name() {
-    basename "$(_git_root)"
+    local root
+    root="$(_git_root)"
+    local basename_name
+    basename_name="$(basename "$root")"
+    
+    # If we're already in an explore worktree, strip the prefix
+    if [[ "$basename_name" =~ ^${GIT_EXPLORE_PREFIX}- ]]; then
+        basename_name="${basename_name#${GIT_EXPLORE_PREFIX}-}"
+    fi
+    
+    echo "$basename_name"
 }
 
 # Hidden sibling worktree path, e.g., ../.explore-my-repo
@@ -61,6 +71,82 @@ _explore_workspace_file() {
         local wt
         wt="$(_explore_path)"
         echo "$wt/ai/explore.code-workspace"
+}
+
+# Generate Copilot CLI prompt file for explore mode
+_generate_explore_prompt() {
+        local wt
+        wt="$(_explore_path)"
+        local prompt_file="$wt/ai/COPILOT_PROMPT.md"
+        local exp_branch
+        exp_branch="$(cd "$wt" && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "explore")"
+        local ts
+        ts="$(date -u +"%Y-%m-%d %H:%MZ")"
+
+        mkdir -p "$wt/ai"
+        cat > "$prompt_file" <<EOF
+# Explore Mode Context
+
+You are working in an explore worktree for safe experimentation.
+
+**Branch:** $exp_branch
+**Worktree:** $wt
+**Time:** $ts
+
+## Guidelines
+
+- This is a sandbox for exploration and prototyping
+- Commits are blocked by a pre-commit hook
+- Document findings in \`ai/EXPLORE.md\` with reverse-chronological entries
+- When done, save notes to main worktree with \`explore save-notes\`
+
+## EXPLORE.md Format
+
+Use this format for new entries (reverse-chronological, newest first):
+
+\`\`\`markdown
+## YYYY-MM-DD HH:MMZ - $exp_branch
+
+Brief description of what you're investigating
+
+**Files touched:** path/to/file1.js, path/to/file2.py
+
+**Key findings:**
+- Finding 1
+- Finding 2
+- Finding 3
+
+**Follow-up:** Recommended next steps for main worktree
+\`\`\`
+
+## Current Exploration Log
+
+EOF
+        if [ -f "$wt/ai/EXPLORE.md" ]; then
+                cat "$wt/ai/EXPLORE.md" >> "$prompt_file"
+        else
+                cat >> "$prompt_file" <<TEMPLATE
+(No entries yet - add your first entry using the format above)
+
+Example:
+\`\`\`markdown
+## $ts - $exp_branch
+
+Investigating authentication flow
+
+**Files touched:** src/auth/index.js, tests/auth.test.js
+
+**Key findings:**
+- OAuth tokens expire after 1 hour
+- No refresh token mechanism exists
+- Token validation happens on every request
+
+**Follow-up:** Add refresh token support in main worktree
+\`\`\`
+TEMPLATE
+        fi
+
+        echo "$prompt_file"
 }
 
 # Open worktree in VS Code with a dedicated dark-purple visual identity.
@@ -130,6 +216,11 @@ HOOK
 
 # Create and initialize explore worktree from current branch
 explore-start() {
+    local cli_mode=false
+    if [ "$1" = "--cli" ]; then
+        cli_mode=true
+    fi
+
     local root
     root="$(_git_root)" || {
         echo "❌ Not inside a git repository."
@@ -194,14 +285,28 @@ explore-start() {
     mkdir -p "$wt/ai"
     touch "$wt/ai/EXPLORE.md"
 
-    echo ""
-    echo "✅ Explore worktree ready!"
-    echo "   Open: code -n $wt"
-    echo "   Or:   cd $wt"
+    # Generate Copilot CLI prompt
+    local prompt_file
+    prompt_file="$(_generate_explore_prompt)"
 
-    # Optional: auto-open VS Code
-    if command -v code >/dev/null 2>&1; then
-        _open_explore_workspace
+    echo ""
+    if [ "$cli_mode" = true ]; then
+        echo "✅ Explore worktree ready (CLI mode)!"
+        echo "   Worktree:      cd $wt"
+        echo "   CLI prompt:    cat $prompt_file"
+        echo ""
+        echo "💡 To view prompt now:"
+        cat "$prompt_file"
+    else
+        echo "✅ Explore worktree ready!"
+        echo "   Open IDE:      code -n $wt"
+        echo "   CLI prompt:    cat $prompt_file"
+        echo "   Or:            cd $wt"
+
+        # Auto-open VS Code
+        if command -v code >/dev/null 2>&1; then
+            _open_explore_workspace
+        fi
     fi
 }
 
@@ -211,8 +316,8 @@ explore-list() {
     git worktree list | grep "${GIT_EXPLORE_PREFIX}" || echo "  (none)"
 }
 
-# Reopen explore worktree in VS Code (or just cd)
-explore-resume() {
+# Generate and display Copilot CLI prompt
+explore-prompt() {
     local wt
     wt="$(_explore_path)"
 
@@ -221,22 +326,83 @@ explore-resume() {
         return 1
     fi
 
-    if command -v code >/dev/null 2>&1; then
-        echo "🔓 Reopening explore worktree in VS Code..."
-        _open_explore_workspace
-    else
-        echo "📂 Explore worktree path: $wt"
-        echo "   cd $wt"
+    local prompt_file
+    prompt_file="$(_generate_explore_prompt)"
+    echo "📋 Copilot CLI prompt generated at: $prompt_file"
+    echo ""
+    cat "$prompt_file"
+}
+
+# Reopen explore worktree in VS Code (or just cd)
+explore-resume() {
+    local cli_mode=false
+    if [ "$1" = "--cli" ]; then
+        cli_mode=true
     fi
+
+    local wt
+    wt="$(_explore_path)"
+
+    if [ ! -d "$wt" ]; then
+        echo "❌ No explore worktree at $wt"
+        return 1
+    fi
+
+    if [ "$cli_mode" = true ]; then
+        local prompt_file
+        prompt_file="$(_generate_explore_prompt)"
+        echo "📂 Explore worktree (CLI mode)"
+        echo "   Worktree:      cd $wt"
+        echo "   CLI prompt:    cat $prompt_file"
+        echo ""
+        echo "💡 To cd into worktree, run: explore cd"
+        echo ""
+        echo "Current prompt:"
+        cat "$prompt_file"
+    else
+        if command -v code >/dev/null 2>&1; then
+            echo "🔓 Reopening explore worktree in VS Code..."
+            _open_explore_workspace
+        else
+            echo "📂 Explore worktree path: $wt"
+            echo "   cd $wt"
+        fi
+    fi
+}
+
+# Change directory to explore worktree (helper for CLI workflow)
+explore-cd() {
+    local wt
+    wt="$(_explore_path)"
+
+    if [ ! -d "$wt" ]; then
+        echo "❌ No explore worktree at $wt"
+        return 1
+    fi
+
+    cd "$wt" || return 1
+    echo "📂 Now in explore worktree: $wt"
+    explore prompt 2>/dev/null | head -3 || true
 }
 
 # Save explore notes from worktree to the main repo before cleanup.
 explore-save-notes() {
+    # Get the true main repo root, not explore worktree
     local root
-    root="$(_git_root)" || {
+    root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
         echo "❌ Not inside a git repository."
         return 1
     }
+    
+    # If we're in an explore worktree, get the main repo path
+    local basename_name
+    basename_name="$(basename "$root")"
+    if [[ "$basename_name" =~ ^${GIT_EXPLORE_PREFIX}- ]]; then
+        # Strip prefix to get main repo name
+        local main_repo_name="${basename_name#${GIT_EXPLORE_PREFIX}-}"
+        # Navigate to parent and then to main repo
+        root="$(cd "$root/.." && pwd)/$main_repo_name"
+    fi
 
     local wt
     wt="$(_explore_path)"
@@ -407,12 +573,16 @@ Usage:
   explore <command> [args]
 
 Commands:
-  start            Create/open explore worktree for current branch
+  start [--cli]    Create/open explore worktree for current branch
+                   --cli: Skip VS Code, CLI-only mode
   stop [--force]   Remove explore worktree (optionally discard changes)
   list             List active explore worktrees
-  resume           Reopen explore worktree in VS Code
+  resume [--cli]   Reopen explore worktree in VS Code
+                   --cli: Show prompt without opening VS Code
+  cd               Change to explore worktree directory
+  prompt           Generate and display Copilot CLI prompt
   doctor           Run safety and state diagnostics
-    save-notes       Save ai/EXPLORE.md from explore worktree to repo ai/EXPLORE.md
+  save-notes       Save ai/EXPLORE.md from explore worktree to repo ai/EXPLORE.md
   help             Show this help
 
 Environment:
@@ -421,10 +591,15 @@ Environment:
   GIT_EXPLORE_BRANCH         Explicit branch name override
 
 Examples:
-  explore start
+  explore start              # Opens in VS Code
+  explore start --cli        # CLI-only mode
+  explore cd                 # cd to explore worktree
+  explore resume             # Reopen in VS Code
+  explore resume --cli       # Resume in CLI mode
+  explore prompt             # Display Copilot CLI prompt
   explore stop --force
   explore doctor
-    explore save-notes
+  explore save-notes
   explore --help
 EOF
 }
@@ -445,6 +620,12 @@ explore() {
             ;;
         resume)
             explore-resume "$@"
+            ;;
+        cd)
+            explore-cd "$@"
+            ;;
+        prompt)
+            explore-prompt "$@"
             ;;
         doctor)
             explore-doctor "$@"
