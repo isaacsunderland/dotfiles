@@ -233,7 +233,15 @@ if [ -f "$HOME/.config/shell/explore.sh" ]; then
     source "$HOME/.config/shell/explore.sh"
 fi
 
-# Ralph execution loop helpers
-if [ -f "$HOME/.config/shell/ralph.sh" ]; then
-    source "$HOME/.config/shell/ralph.sh"
-fi
+# Ralph execution loop helpers (lazy loaded)
+ralph() {
+    # Lazy load ralph.sh on first use
+    if [ -f "$HOME/.config/shell/ralph.sh" ]; then
+        unset -f ralph  # Remove this stub function
+        source "$HOME/.config/shell/ralph.sh"
+        ralph "$@"  # Call the real ralph function
+    else
+        echo "❌ Ralph not found at ~/.config/shell/ralph.sh"
+        return 1
+    fi
+}
