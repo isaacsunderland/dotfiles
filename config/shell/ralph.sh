@@ -86,13 +86,9 @@ ralph-init() {
         if [ "$has_explore" = true ] && [ "$auto_translate" = true ]; then
             echo "🤖 Generating SPEC.md from EXPLORE.md using AI (deep thinking model)..."
             
-            local model_flag=""
-            if [ -n "$RALPH_TRANSLATION_MODEL" ]; then
-                model_flag="--model $RALPH_TRANSLATION_MODEL"
-            fi
-            
             local spec_content
-            spec_content=$(copilot -p "Read the exploration log below and extract a specification document.
+            if [ -n "$RALPH_TRANSLATION_MODEL" ]; then
+                spec_content=$(copilot --model "$RALPH_TRANSLATION_MODEL" -p "Read the exploration log below and extract a specification document.
 
 Extract:
 1. Technical constraints from 'Key findings' section  
@@ -113,7 +109,31 @@ Output markdown with these sections:
 Exploration log:
 $(cat "$explore_file")
 
-Output ONLY the markdown sections (no explanations, no heading)." $model_flag --allow-all-tools 2>&1 | sed '/^Total usage/,$ d' || echo "")
+Output ONLY the markdown sections (no explanations, no heading)." --allow-all-tools 2>&1 | sed '/^Total usage/,$ d' || echo "")
+            else
+                spec_content=$(copilot -p "Read the exploration log below and extract a specification document.
+
+Extract:
+1. Technical constraints from 'Key findings' section  
+2. Requirements and non-negotiables
+3. Acceptance criteria based on 'Follow-up' section
+
+Output markdown with these sections:
+
+## Constraints
+(bullet list of technical constraints)
+
+## Acceptance Criteria
+(convert follow-up items to checkboxes: - [ ] description)
+
+## Context
+(brief summary referencing EXPLORE.md)
+
+Exploration log:
+$(cat "$explore_file")
+
+Output ONLY the markdown sections (no explanations, no heading)." --allow-all-tools 2>&1 | sed '/^Total usage/,$ d' || echo "")
+            fi
             
             if [ -n "$spec_content" ] && [ "$(echo "$spec_content" | wc -w)" -gt 10 ]; then
                 cat > "$ai_dir/SPEC.md" <<EOF
@@ -197,12 +217,9 @@ EOF
     if [ ! -f "$ai_dir/PLAN.md" ]; then
         if [ "$has_explore" = true ] && [ "$auto_translate" = true ]; then
             echo "🤖 Generating PLAN.md from EXPLORE.md using AI (deep thinking model)..."
-            local model_flag=""
-            if [ -n "$RALPH_TRANSLATION_MODEL" ]; then
-                model_flag="--model $RALPH_TRANSLATION_MODEL"
-            fi
             local plan_content
-            plan_content=$(copilot -p "Read the exploration log and create a plan document.
+            if [ -n "$RALPH_TRANSLATION_MODEL" ]; then
+                plan_content=$(copilot --model "$RALPH_TRANSLATION_MODEL" -p "Read the exploration log and create a plan document.
 
 Extract:
 1. Proposed strategy and architecture from key findings
@@ -223,7 +240,31 @@ Output markdown with:
 Exploration log:
 $(cat "$explore_file")
 
-Output ONLY the markdown sections." $model_flag --allow-all-tools 2>&1 | sed '/^Total usage/,$ d' || echo "")
+Output ONLY the markdown sections." --allow-all-tools 2>&1 | sed '/^Total usage/,$ d' || echo "")
+            else
+                plan_content=$(copilot -p "Read the exploration log and create a plan document.
+
+Extract:
+1. Proposed strategy and architecture from key findings
+2. Files touched (for dependencies section)
+3. Open questions (convert to risks with mitigations)
+
+Output markdown with:
+
+## Architecture
+(technical approach and design decisions)
+
+## Dependencies
+(files touched and external dependencies)
+
+## Risks
+(open questions as risks with mitigation strategies)
+
+Exploration log:
+$(cat "$explore_file")
+
+Output ONLY the markdown sections." --allow-all-tools 2>&1 | sed '/^Total usage/,$ d' || echo "")
+            fi
             
             if [ -n "$plan_content" ] && [ "$(echo "$plan_content" | wc -w)" -gt 10 ]; then
                 cat > "$ai_dir/PLAN.md" <<EOF
@@ -304,12 +345,9 @@ EOF
     if [ ! -f "$ai_dir/TASKS.md" ]; then
         if [ "$has_explore" = true ] && [ "$auto_translate" = true ]; then
             echo "🤖 Generating TASKS.md from EXPLORE.md using AI (deep thinking model)..."
-            local model_flag=""
-            if [ -n "$RALPH_TRANSLATION_MODEL" ]; then
-                model_flag="--model $RALPH_TRANSLATION_MODEL"
-            fi
             local tasks_content
-            tasks_content=$(copilot -p "Read the exploration log and create a task list.
+            if [ -n "$RALPH_TRANSLATION_MODEL" ]; then
+                tasks_content=$(copilot --model "$RALPH_TRANSLATION_MODEL" -p "Read the exploration log and create a task list.
 
 Convert follow-up actions to concrete tasks using this format:
 - [ ] TASK-001: <type>: <description>
@@ -325,7 +363,26 @@ Output format:
 Exploration log:
 $(cat "$explore_file")
 
-Output ONLY the ## Backlog section with tasks." $model_flag --allow-all-tools 2>&1 | sed '/^Total usage/,$ d' || echo "")
+Output ONLY the ## Backlog section with tasks." --allow-all-tools 2>&1 | sed '/^Total usage/,$ d' || echo "")
+            else
+                tasks_content=$(copilot -p "Read the exploration log and create a task list.
+
+Convert follow-up actions to concrete tasks using this format:
+- [ ] TASK-001: <type>: <description>
+
+Where <type> is: feat, fix, refactor, test, docs, or chore
+
+Make tasks specific and implementable based on files touched and proposed changes.
+
+Output format:
+## Backlog
+(task list here)
+
+Exploration log:
+$(cat "$explore_file")
+
+Output ONLY the ## Backlog section with tasks." --allow-all-tools 2>&1 | sed '/^Total usage/,$ d' || echo "")
+            fi
             
             if [ -n "$tasks_content" ] && [ "$(echo "$tasks_content" | wc -w)" -gt 10 ]; then
                 cat > "$ai_dir/TASKS.md" <<EOF
@@ -581,13 +638,9 @@ ralph-loop() {
         echo "🤖 Calling Copilot CLI (fast execution model)..."
         echo ""
         
-        local model_flag=""
-        if [ -n "$RALPH_EXECUTION_MODEL" ]; then
-            model_flag="--model $RALPH_EXECUTION_MODEL"
-        fi
-        
         # Call GitHub Copilot CLI with Ralph prompt using fast execution tier
-        copilot -p "You are a worker agent executing a single task.
+        if [ -n "$RALPH_EXECUTION_MODEL" ]; then
+            copilot --model "$RALPH_EXECUTION_MODEL" -p "You are a worker agent executing a single task.
 
 Read these files in the repository:
 - $RALPH_AI_DIR/SPEC.md (constraints and acceptance criteria)
@@ -606,7 +659,29 @@ Rules:
 
 After implementation:
 - Confirm when complete or report blockers
-- Show what files were changed" $model_flag --allow-all-tools
+- Show what files were changed" --allow-all-tools
+        else
+            copilot -p "You are a worker agent executing a single task.
+
+Read these files in the repository:
+- $RALPH_AI_DIR/SPEC.md (constraints and acceptance criteria)
+- $RALPH_AI_DIR/PLAN.md (architecture and approach)
+- $RALPH_AI_DIR/TASKS.md (task list)
+
+Current task: $next_task
+
+Rules:
+- Implement ONLY this task
+- Do not explore alternatives or deviate from the plan
+- Do not modify planning files (SPEC.md, PLAN.md, TASKS.md)
+- Leave TODO comments if blocked
+- Make minimal, surgical changes
+- Follow the architecture defined in PLAN.md
+
+After implementation:
+- Confirm when complete or report blockers
+- Show what files were changed" --allow-all-tools
+        fi
         
         echo ""
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -788,13 +863,9 @@ ralph-validate() {
     git --no-pager diff --stat HEAD
     echo ""
     
-    local model_flag=""
-    if [ -n "$RALPH_VALIDATION_MODEL" ]; then
-        model_flag="--model $RALPH_VALIDATION_MODEL"
-    fi
-    
     # Call GitHub Copilot CLI with validation prompt using smart model
-    copilot -p "You are a validation agent reviewing code changes.
+    if [ -n "$RALPH_VALIDATION_MODEL" ]; then
+        copilot --model "$RALPH_VALIDATION_MODEL" -p "You are a validation agent reviewing code changes.
 
 Read these files in the repository:
 - $RALPH_AI_DIR/SPEC.md (constraints and acceptance criteria)
@@ -816,7 +887,32 @@ Output format:
 ✅ PASS or ❌ FAIL
 - List specific issues found (if any)
 - Suggest fixes for any problems
-- Confirm if ready to commit or needs revision" $model_flag --allow-all-tools
+- Confirm if ready to commit or needs revision" --allow-all-tools
+    else
+        copilot -p "You are a validation agent reviewing code changes.
+
+Read these files in the repository:
+- $RALPH_AI_DIR/SPEC.md (constraints and acceptance criteria)
+- $RALPH_AI_DIR/PLAN.md (architecture and approach)
+- $RALPH_AI_DIR/TASKS.md (task list)
+
+Current task being validated: $current_task
+
+Review the git diff and verify:
+
+1. **Correctness**: Do changes match the task description?
+2. **Completeness**: Is the task fully implemented (no missing pieces)?
+3. **Constraints**: Do changes respect constraints in SPEC.md?
+4. **Architecture**: Do changes follow the approach in PLAN.md?
+5. **Safety**: Are there any bugs, security issues, or edge cases missed?
+6. **Scope**: Are changes minimal and focused on this task only?
+
+Output format:
+✅ PASS or ❌ FAIL
+- List specific issues found (if any)
+- Suggest fixes for any problems
+- Confirm if ready to commit or needs revision" --allow-all-tools
+    fi
     
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
