@@ -1,0 +1,652 @@
+#!/usr/bin/env bash
+# Git explore worktree helpers for safe, isolated experimentation.
+# Usage: explore [start|stop|list|resume|doctor|save-notes|help]
+# Customizable via env vars: GIT_EXPLORE_PREFIX, GIT_EXPLORE_BRANCH_PREFIX, GIT_EXPLORE_BRANCH
+
+set -euo pipefail
+
+# Configuration with sensible defaults
+GIT_EXPLORE_PREFIX="${GIT_EXPLORE_PREFIX:-.explore}"
+GIT_EXPLORE_BRANCH_PREFIX="${GIT_EXPLORE_BRANCH_PREFIX:-explore}"
+GIT_EXPLORE_BRANCH="${GIT_EXPLORE_BRANCH:-}"
+
+# Build a branch-safe suffix from a base branch name.
+_sanitize_branch_component() {
+    local value="${1:-}"
+    value="${value//\//-}"
+    value="${value// /-}"
+    value="$(printf '%s' "$value" | tr -cs '[:alnum:]._-' '-')"
+    value="${value#-}"
+    value="${value%-}"
+
+    if [ -z "$value" ]; then
+        value="root"
+    fi
+
+    echo "$value"
+}
+
+# Resolve final explore branch name.
+# - If GIT_EXPLORE_BRANCH is set, use it as-is.
+# - Otherwise generate <prefix>-<base-branch>.
+_explore_branch_name() {
+    local base_branch="${1:-}"
+
+    if [ -n "${GIT_EXPLORE_BRANCH}" ]; then
+        echo "${GIT_EXPLORE_BRANCH}"
+        return
+    fi
+
+    echo "${GIT_EXPLORE_BRANCH_PREFIX}-$(_sanitize_branch_component "$base_branch")"
+}
+
+# Resolve a repo's top-level path even if called from a subdir
+_git_root() {
+    git rev-parse --show-toplevel 2>/dev/null
+}
+
+# Derive a short, filesystem-safe repo name (directory name)
+_repo_name() {
+    local root
+    root="$(_git_root)"
+    local basename_name
+    basename_name="$(basename "$root")"
+    
+    # If we're already in an explore worktree, strip the prefix
+    if [[ "$basename_name" =~ ^${GIT_EXPLORE_PREFIX}- ]]; then
+        basename_name="${basename_name#${GIT_EXPLORE_PREFIX}-}"
+    fi
+    
+    echo "$basename_name"
+}
+
+# Hidden sibling worktree path, e.g., ../.explore-my-repo
+_explore_path() {
+    local root
+    root="$(_git_root)"
+    local parent
+    parent="$(cd "$root/.." && pwd)"
+    echo "$parent/${GIT_EXPLORE_PREFIX}-$(_repo_name)"
+}
+
+# Workspace file used to open explore mode with distinct VS Code colors.
+_explore_workspace_file() {
+        local wt
+        wt="$(_explore_path)"
+        echo "$wt/ai/explore.code-workspace"
+}
+
+# Generate Copilot CLI prompt file for explore mode
+_generate_explore_prompt() {
+        local wt
+        wt="$(_explore_path)"
+        local prompt_file="$wt/ai/COPILOT_PROMPT.md"
+        local exp_branch
+        exp_branch="$(cd "$wt" && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "explore")"
+        local ts
+        ts="$(date -u +"%Y-%m-%d %H:%MZ")"
+
+        mkdir -p "$wt/ai"
+        cat > "$prompt_file" <<EOF
+# Explore Mode Context
+
+You are working in an explore worktree for safe experimentation.
+
+**Branch:** $exp_branch
+**Worktree:** $wt
+**Time:** $ts
+
+## Guidelines
+
+- This is a sandbox for exploration and prototyping
+- Commits are blocked by a pre-commit hook
+- Document findings in \`ai/EXPLORE.md\` with reverse-chronological entries
+- When done, save notes to main worktree with \`explore save-notes\`
+
+## EXPLORE.md Format
+
+Use this format for new entries (reverse-chronological, newest first):
+
+\`\`\`markdown
+## YYYY-MM-DD HH:MMZ - $exp_branch
+
+Brief description of what you're investigating
+
+**Files touched:** path/to/file1.js, path/to/file2.py
+
+**Key findings:**
+- Finding 1
+- Finding 2
+- Finding 3
+
+**Follow-up:** Recommended next steps for main worktree
+\`\`\`
+
+## Current Exploration Log
+
+EOF
+        if [ -f "$wt/ai/EXPLORE.md" ]; then
+                cat "$wt/ai/EXPLORE.md" >> "$prompt_file"
+        else
+                cat >> "$prompt_file" <<TEMPLATE
+(No entries yet - add your first entry using the format above)
+
+Example:
+\`\`\`markdown
+## $ts - $exp_branch
+
+Investigating authentication flow
+
+**Files touched:** src/auth/index.js, tests/auth.test.js
+
+**Key findings:**
+- OAuth tokens expire after 1 hour
+- No refresh token mechanism exists
+- Token validation happens on every request
+
+**Follow-up:** Add refresh token support in main worktree
+\`\`\`
+TEMPLATE
+        fi
+
+        echo "$prompt_file"
+}
+
+# Open worktree in VS Code with a dedicated dark-purple visual identity.
+_open_explore_workspace() {
+        local wt
+        wt="$(_explore_path)"
+        local ws
+        ws="$(_explore_workspace_file)"
+
+        mkdir -p "$wt/ai"
+        cat > "$ws" <<'EOF'
+{
+    "folders": [
+        { "path": ".." }
+    ],
+    "settings": {
+        "workbench.colorCustomizations": {
+            "titleBar.activeBackground": "#1b1026",
+            "titleBar.activeForeground": "#f2ebff",
+            "titleBar.inactiveBackground": "#140d1d",
+            "titleBar.inactiveForeground": "#b9aecb",
+            "activityBar.background": "#1a1124",
+            "activityBar.foreground": "#dbcfff",
+            "statusBar.background": "#241339",
+            "statusBar.foreground": "#f2ebff",
+            "statusBar.noFolderBackground": "#241339",
+            "statusBar.debuggingBackground": "#3a1e57"
+        },
+        "window.title": "Explore: ${folderName}"
+    }
+}
+EOF
+
+        code -n "$ws" >/dev/null 2>&1 || true
+}
+
+# Install safety hook to prevent accidental commits in explore worktree
+_install_explore_guard() {
+    local wt="$(_explore_path)"
+    mkdir -p "$wt/.githooks"
+    cat > "$wt/.githooks/pre-commit" <<'HOOK'
+#!/usr/bin/env bash
+echo "⚠️  Commits are disabled in explore worktree to prevent accidents."
+echo "   Translate findings → create tasks/PRs in main worktree."
+exit 1
+HOOK
+    chmod +x "$wt/.githooks/pre-commit"
+    (cd "$wt" && git config core.hooksPath .githooks)
+
+    # Keep explore-only artifacts local and out of commits.
+    # Use the common git dir exclude so patterns apply in linked worktrees.
+    local common_git_dir
+    local exclude_file
+    common_git_dir="$(cd "$wt" && git rev-parse --git-common-dir 2>/dev/null || true)"
+    if [ -n "$common_git_dir" ]; then
+        exclude_file="$common_git_dir/info/exclude"
+        mkdir -p "$common_git_dir/info"
+        touch "$exclude_file"
+        if ! grep -qx 'ai/' "$exclude_file"; then
+            printf '\nai/\n' >> "$exclude_file"
+        fi
+        if ! grep -qx '.githooks/' "$exclude_file"; then
+            printf '\n.githooks/\n' >> "$exclude_file"
+        fi
+    fi
+}
+
+# Create and initialize explore worktree from current branch
+explore_start() {
+    local cli_mode=false
+    if [ "${1:-}" = "--cli" ]; then
+        cli_mode=true
+    fi
+
+    local root
+    root="$(_git_root)" || {
+        echo "❌ Not inside a git repository."
+        return 1
+    }
+
+    local current_branch
+    current_branch="$(git rev-parse --abbrev-ref HEAD)"
+    local exp_branch
+    exp_branch="$(_explore_branch_name "$current_branch")"
+    local wt
+    wt="$(_explore_path)"
+
+    echo "📍 Current branch: $current_branch"
+    echo "🧪 Explore branch: $exp_branch"
+    echo "📁 Worktree path: $wt"
+
+    # Create explore branch from current branch if missing
+    if ! git show-ref --verify --quiet "refs/heads/${exp_branch}"; then
+        echo "⎇ Creating '${exp_branch}' from '${current_branch}'..."
+        git fetch --all --prune 2>/dev/null || true
+        git branch "${exp_branch}" "${current_branch}" || {
+            echo "❌ Failed to create explore branch"
+            return 1
+        }
+    else
+        echo "✔ Explore branch '${exp_branch}' already exists"
+    fi
+
+    # Create worktree if missing
+    if [ ! -d "$wt" ]; then
+        echo "➕ Adding worktree: $wt"
+        git worktree add "$wt" "${exp_branch}" || {
+            echo "❌ Failed to create worktree at $wt"
+            return 1
+        }
+    else
+        echo "✔ Worktree already exists: $wt"
+
+        # Keep a single explore worktree path, but retarget its branch per source branch.
+        local wt_branch
+        wt_branch="$(cd "$wt" && git rev-parse --abbrev-ref HEAD)"
+        if [ "$wt_branch" != "$exp_branch" ]; then
+            if (cd "$wt" && [ -n "$(git status --porcelain)" ]); then
+                echo "❌ Existing explore worktree has uncommitted changes on '$wt_branch'."
+                echo "   Commit/stash there, or run: explore stop --force"
+                return 1
+            fi
+
+            echo "🔁 Switching explore worktree branch: $wt_branch -> $exp_branch"
+            (cd "$wt" && git switch "$exp_branch") || {
+                echo "❌ Failed to switch explore worktree to '$exp_branch'"
+                return 1
+            }
+        fi
+    fi
+
+    # Install safety guard
+    _install_explore_guard
+
+    # Seed optional exploration notes
+    mkdir -p "$wt/ai"
+    touch "$wt/ai/EXPLORE.md"
+
+    # Generate Copilot CLI prompt
+    local prompt_file
+    prompt_file="$(_generate_explore_prompt)"
+
+    echo ""
+    if [ "$cli_mode" = true ]; then
+        echo "✅ Explore worktree ready (CLI mode)!"
+        echo "   Worktree:      cd $wt"
+        echo "   CLI prompt:    cat $prompt_file"
+        echo ""
+        echo "💡 To view prompt now:"
+        cat "$prompt_file"
+    else
+        echo "✅ Explore worktree ready!"
+        echo "   Open IDE:      code -n $wt"
+        echo "   CLI prompt:    cat $prompt_file"
+        echo "   Or:            cd $wt"
+
+        # Auto-open VS Code
+        if command -v code >/dev/null 2>&1; then
+            _open_explore_workspace
+        fi
+    fi
+}
+
+# List active explore worktrees
+explore_list() {
+    echo "Explore worktrees:"
+    git worktree list | grep "${GIT_EXPLORE_PREFIX}" || echo "  (none)"
+}
+
+# Generate and display Copilot CLI prompt
+explore_prompt() {
+    local wt
+    wt="$(_explore_path)"
+
+    if [ ! -d "$wt" ]; then
+        echo "❌ No explore worktree at $wt"
+        return 1
+    fi
+
+    local prompt_file
+    prompt_file="$(_generate_explore_prompt)"
+    echo "📋 Copilot CLI prompt generated at: $prompt_file"
+    echo ""
+    cat "$prompt_file"
+}
+
+# Reopen explore worktree in VS Code (or just cd)
+explore_resume() {
+    local cli_mode=false
+    if [ "${1:-}" = "--cli" ]; then
+        cli_mode=true
+    fi
+
+    local wt
+    wt="$(_explore_path)"
+
+    if [ ! -d "$wt" ]; then
+        echo "❌ No explore worktree at $wt"
+        return 1
+    fi
+
+    if [ "$cli_mode" = true ]; then
+        local prompt_file
+        prompt_file="$(_generate_explore_prompt)"
+        echo "📂 Explore worktree (CLI mode)"
+        echo "   Worktree:      cd $wt"
+        echo "   CLI prompt:    cat $prompt_file"
+        echo ""
+        echo "💡 To cd into worktree, run: explore cd"
+        echo ""
+        echo "Current prompt:"
+        cat "$prompt_file"
+    else
+        if command -v code >/dev/null 2>&1; then
+            echo "🔓 Reopening explore worktree in VS Code..."
+            _open_explore_workspace
+        else
+            echo "📂 Explore worktree path: $wt"
+            echo "   cd $wt"
+        fi
+    fi
+}
+
+# Change directory to explore worktree (helper for CLI workflow)
+explore_cd() {
+    local wt
+    wt="$(_explore_path)"
+
+    if [ ! -d "$wt" ]; then
+        echo "❌ No explore worktree at $wt"
+        return 1
+    fi
+
+    # Note: This won't actually change the parent shell's directory
+    # The user needs to use: cd $(explore cd) or eval "$(explore cd)"
+    echo "$wt"
+}
+
+# Save explore notes from worktree to the main repo before cleanup.
+explore_save_notes() {
+    # Get the true main repo root, not explore worktree
+    local root
+    root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
+        echo "❌ Not inside a git repository."
+        return 1
+    }
+    
+    # If we're in an explore worktree, get the main repo path
+    local basename_name
+    basename_name="$(basename "$root")"
+    if [[ "$basename_name" =~ ^${GIT_EXPLORE_PREFIX}- ]]; then
+        # Strip prefix to get main repo name
+        local main_repo_name="${basename_name#${GIT_EXPLORE_PREFIX}-}"
+        # Navigate to parent and then to main repo
+        root="$(cd "$root/.." && pwd)/$main_repo_name"
+    fi
+
+    local wt
+    wt="$(_explore_path)"
+    local src="$wt/ai/EXPLORE.md"
+    local dest_dir="$root/ai"
+    local dest="$dest_dir/EXPLORE.md"
+
+    if [ ! -f "$src" ] || [ ! -s "$src" ]; then
+        echo "ℹ️  No explore notes to save at $src"
+        return 0
+    fi
+
+    local exp_branch
+    exp_branch="$(cd "$wt" && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")"
+    local ts
+    ts="$(date -u +"%Y-%m-%d %H:%M:%SZ")"
+
+    mkdir -p "$dest_dir"
+    touch "$dest"
+
+    {
+        echo ""
+        echo "## Saved from $exp_branch at $ts"
+        echo ""
+        echo "Source worktree: $wt"
+        echo ""
+        cat "$src"
+        echo ""
+    } >> "$dest"
+
+    echo "💾 Saved notes to $dest"
+}
+
+# Remove explore worktree safely
+explore_stop() {
+    local wt
+    wt="$(_explore_path)"
+    local current_branch
+    current_branch="$(git rev-parse --abbrev-ref HEAD)"
+    local force_flag="${1:-}"
+
+    if [ ! -d "$wt" ]; then
+        echo "✔ No explore worktree at $wt"
+        return 0
+    fi
+
+    local exp_branch
+    exp_branch="$(cd "$wt" && git rev-parse --abbrev-ref HEAD)"
+
+    # Offer to save exploration notes before deleting the worktree.
+    if [ -f "$wt/ai/EXPLORE.md" ] && [ -s "$wt/ai/EXPLORE.md" ]; then
+        printf "Save explore notes before removing worktree? [Y/n] "
+        local save_ans
+        read -r save_ans
+        if [ -z "${save_ans:-}" ] || [ "$save_ans" = "y" ] || [ "$save_ans" = "Y" ]; then
+            explore_save_notes || {
+                echo "❌ Failed to save notes"
+                return 1
+            }
+        fi
+    fi
+
+    # Check for uncommitted changes unless --force
+    if [ "$force_flag" != "--force" ]; then
+        if (cd "$wt" && [ -n "$(git status --porcelain)" ]); then
+            echo "⚠️  Uncommitted changes in explore worktree:"
+            (cd "$wt" && git status --short)
+            echo ""
+            echo "Options:"
+            echo "  - Commit/stash changes, then re-run: explore stop"
+            echo "  - Force remove (discard changes): explore stop --force"
+            return 1
+        fi
+    fi
+
+    echo "🧹 Removing worktree: $wt"
+    git worktree remove "$wt" || {
+        echo "❌ Failed to remove worktree"
+        return 1
+    }
+
+    # Offer to reset explore branch (only non-interactive if --force)
+    if [ "$force_flag" = "--force" ]; then
+        git branch -f "$exp_branch" "$current_branch" 2>/dev/null || true
+        echo "⟲ '$exp_branch' reset to '$current_branch' (--force)"
+    else
+        printf "Reset '%s' to '%s'? [y/N] " "$exp_branch" "$current_branch"
+        read -r ans
+        if [ "${ans:-N}" = "y" ] || [ "${ans:-N}" = "Y" ]; then
+            git branch -f "$exp_branch" "$current_branch" || true
+            echo "⟲ '$exp_branch' reset to '$current_branch'"
+        fi
+    fi
+
+    echo "✅ Explore worktree removed."
+}
+
+# Check explore prerequisites and current state.
+explore_doctor() {
+    local root
+    root="$(_git_root)" || {
+        echo "❌ Not inside a git repository."
+        return 1
+    }
+
+    local current_branch
+    current_branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
+    local exp_branch
+    exp_branch="$(_explore_branch_name "$current_branch")"
+    local wt
+    wt="$(_explore_path)"
+    local has_issue=0
+
+    echo "Explore doctor"
+    echo "-------------"
+    echo "Repo root:       $root"
+    echo "Current branch:  ${current_branch:-<unknown>}"
+    echo "Explore branch:  $exp_branch"
+    echo "Worktree path:   $wt"
+
+    if git show-ref --verify --quiet "refs/heads/${exp_branch}"; then
+        echo "✅ Explore branch exists"
+    else
+        echo "ℹ️  Explore branch does not exist yet (created by explore start)"
+    fi
+
+    if [ -d "$wt" ]; then
+        echo "✅ Explore worktree exists"
+
+        local wt_branch
+        wt_branch="$(cd "$wt" && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
+        if [ -n "$wt_branch" ]; then
+            echo "ℹ️  Worktree branch: $wt_branch"
+        else
+            echo "⚠️  Could not determine worktree branch"
+            has_issue=1
+        fi
+
+        if (cd "$wt" && [ -n "$(git status --porcelain)" ]); then
+            echo "⚠️  Worktree has uncommitted changes"
+            has_issue=1
+        else
+            echo "✅ Worktree is clean"
+        fi
+
+        if [ -x "$wt/.githooks/pre-commit" ]; then
+            echo "✅ Commit guard hook is installed"
+        else
+            echo "⚠️  Commit guard hook is missing"
+            has_issue=1
+        fi
+    else
+        echo "ℹ️  Explore worktree not present (create with explore start)"
+    fi
+
+    if [ "$has_issue" -eq 0 ]; then
+        echo "✅ Doctor checks passed"
+    else
+        echo "⚠️  Doctor found issues"
+    fi
+
+    return "$has_issue"
+}
+
+explore_help() {
+    cat <<'EOF'
+Usage:
+  explore <command> [args]
+
+Commands:
+  start [--cli]    Create/open explore worktree for current branch
+                   --cli: Skip VS Code, CLI-only mode
+  stop [--force]   Remove explore worktree (optionally discard changes)
+  list             List active explore worktrees
+  resume [--cli]   Reopen explore worktree in VS Code
+                   --cli: Show prompt without opening VS Code
+  cd               Print explore worktree path (use with: cd $(explore cd))
+  prompt           Generate and display Copilot CLI prompt
+  doctor           Run safety and state diagnostics
+  save-notes       Save ai/EXPLORE.md from explore worktree to repo ai/EXPLORE.md
+  help             Show this help
+
+Environment:
+  GIT_EXPLORE_PREFIX         Worktree directory prefix (default: .explore)
+  GIT_EXPLORE_BRANCH_PREFIX  Auto branch prefix (default: explore)
+  GIT_EXPLORE_BRANCH         Explicit branch name override
+
+Examples:
+  explore start              # Opens in VS Code
+  explore start --cli        # CLI-only mode
+  cd $(explore cd)           # cd to explore worktree
+  explore resume             # Reopen in VS Code
+  explore resume --cli       # Resume in CLI mode
+  explore prompt             # Display Copilot CLI prompt
+  explore stop --force
+  explore doctor
+  explore save-notes
+  explore --help
+EOF
+}
+
+# Main entry point
+main() {
+    local cmd="${1:-help}"
+    shift 2>/dev/null || true
+
+    case "$cmd" in
+        start)
+            explore_start "$@"
+            ;;
+        stop)
+            explore_stop "$@"
+            ;;
+        list)
+            explore_list "$@"
+            ;;
+        resume)
+            explore_resume "$@"
+            ;;
+        cd)
+            explore_cd "$@"
+            ;;
+        prompt)
+            explore_prompt "$@"
+            ;;
+        doctor)
+            explore_doctor "$@"
+            ;;
+        save-notes)
+            explore_save_notes "$@"
+            ;;
+        help|-h|--help)
+            explore_help
+            ;;
+        *)
+            echo "❌ Unknown explore command: $cmd"
+            echo ""
+            explore_help
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"

@@ -1,5 +1,10 @@
 # Shared shell helpers for both zsh and bash.
 
+# Add dotfiles bin to PATH
+if [ -d "$HOME/.config/bin" ]; then
+    export PATH="$HOME/.config/bin:$PATH"
+fi
+
 _sanitize_path_entries() {
     local path_in path_out old_ifs entry
 
@@ -74,11 +79,11 @@ if [ -n "$DOTFILES_BASH_BIN" ]; then
     alias bash="$DOTFILES_BASH_BIN"
 fi
 
-# Prefer uutils coreutils when available
-if command -v brew >/dev/null 2>&1; then
-    if [ -d "$(brew --prefix uutils-coreutils 2>/dev/null)/libexec/uubin" ]; then
-        export PATH="$(brew --prefix uutils-coreutils)/libexec/uubin:$PATH"
-    fi
+# Prefer uutils coreutils when available (cached path to avoid slow brew --prefix)
+if [ -d /opt/homebrew/opt/uutils-coreutils/libexec/uubin ]; then
+    export PATH="/opt/homebrew/opt/uutils-coreutils/libexec/uubin:$PATH"
+elif [ -d /usr/local/opt/uutils-coreutils/libexec/uubin ]; then
+    export PATH="/usr/local/opt/uutils-coreutils/libexec/uubin:$PATH"
 fi
 
 # FZF default command
@@ -226,22 +231,5 @@ CNPG_EOF
         mv /tmp/kubectl_complete-cnpg /opt/homebrew/bin/
     else
         echo "Warning: Could not install kubectl_complete-cnpg. Ensure /usr/local/bin or /opt/homebrew/bin is writable."
-    fi
-}
-# Git explore worktree helpers
-if [ -f "$HOME/.config/shell/explore.sh" ]; then
-    source "$HOME/.config/shell/explore.sh"
-fi
-
-# Ralph execution loop helpers (lazy loaded)
-ralph() {
-    # Lazy load ralph.sh on first use
-    if [ -f "$HOME/.config/shell/ralph.sh" ]; then
-        unset -f ralph  # Remove this stub function
-        source "$HOME/.config/shell/ralph.sh"
-        ralph "$@"  # Call the real ralph function
-    else
-        echo "❌ Ralph not found at ~/.config/shell/ralph.sh"
-        return 1
     fi
 }

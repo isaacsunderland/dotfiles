@@ -82,7 +82,9 @@ mkdir -p ~/.config/starship
 mkdir -p ~/.config/zsh
 mkdir -p ~/.config/shell
 mkdir -p ~/.config/tealdeer
+mkdir -p ~/.config/bin
 mkdir -p ~/.local/bin
+mkdir -p ~/.cache
 
 # 4. Link config files (skip on remote-console, only link if available)
 echo "Linking configuration files..."
@@ -90,6 +92,10 @@ if [ "$OS_TYPE" != "remote-console" ] && [ "$OS_TYPE" != "remote-windows" ]; the
     ln -sfv "$DOTFILES_DIR/config/kitty/kitty.conf" ~/.config/kitty/
     ln -sfv "$DOTFILES_DIR/config/starship.toml" ~/.config/starship.toml
     ln -sfn "$DOTFILES_DIR/config/shell" ~/.config/shell
+    # Link bin directory for ralph/explore executables
+    for script in "$DOTFILES_DIR/bin"/*; do
+        [ -f "$script" ] && ln -sfv "$script" ~/.config/bin/
+    done
     # tealdeer (tldr) configuration
     if [ -f "$DOTFILES_DIR/config/tealdeer/config.toml" ]; then
         ln -sfv "$DOTFILES_DIR/config/tealdeer/config.toml" ~/.config/tealdeer/config.toml
@@ -107,6 +113,10 @@ if [ "$OS_TYPE" != "remote-console" ] && [ "$OS_TYPE" != "remote-windows" ]; the
 else
     echo "Remote environment detected - linking shell configs only"
     ln -sfn "$DOTFILES_DIR/config/shell" ~/.config/shell
+    # Link bin directory for ralph/explore executables
+    for script in "$DOTFILES_DIR/bin"/*; do
+        [ -f "$script" ] && ln -sfv "$script" ~/.config/bin/
+    done
     ln -sfv "$DOTFILES_DIR/.zshrc" ~/.zshrc
     ln -sfv "$DOTFILES_DIR/.bashrc" ~/.bashrc
     

@@ -1,0 +1,1054 @@
+#!/usr/bin/env bash
+# Ralph-style execution loop helpers for deterministic, incremental development.
+# Usage: ralph [init|loop|task|commit|status|validate|help]
+# Works in the main/master worktree - exploration happens in explore worktree
+
+set -euo pipefail
+
+# Configuration
+RALPH_AI_DIR="${RALPH_AI_DIR:-ai}"
+
+# Model tier strategy (can be overridden via environment)
+# Tier 1: Deep thinking (translation) - claude-sonnet-4.5 for context understanding
+# Tier 2: Quality execution (implementation) - gpt-5.1 for best spec-following
+# Tier 3: Smart validation (review) - claude-opus-4.5 for thorough bug detection
+export RALPH_TRANSLATION_MODEL="${RALPH_TRANSLATION_MODEL:-claude-sonnet-4.5}"
+export RALPH_EXECUTION_MODEL="${RALPH_EXECUTION_MODEL:-gpt-5.1}"
+export RALPH_VALIDATION_MODEL="${RALPH_VALIDATION_MODEL:-claude-opus-4.5}"
+
+# Resolve repo root (always returns main repo, never explore worktree)
+_ralph_root() {
+    local root
+    root="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1
+    
+    # If we're in an explore worktree, navigate to the main repo
+    local basename_name
+    basename_name="$(basename "$root")"
+    local explore_prefix="${GIT_EXPLORE_PREFIX:-.explore}"
+    
+    if [[ "$basename_name" =~ ^${explore_prefix}- ]]; then
+        # Strip prefix to get main repo name
+        local main_repo_name="${basename_name#${explore_prefix}-}"
+        # Navigate to parent and then to main repo
+        root="$(cd "$root/.." && pwd)/$main_repo_name"
+    fi
+    
+    echo "$root"
+}
+
+# Initialize Ralph workflow structure in current repo
+ralph_init() {
+    local from_explore=false
+    local auto_translate=false
+    
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --from-explore)
+                from_explore=true
+                shift
+                ;;
+            --auto)
+                auto_translate=true
+                shift
+                ;;
+            *)
+                echo "❌ Unknown option: $1"
+                return 1
+                ;;
+        esac
+    done
+
+    local root
+    root="$(_ralph_root)" || {
+        echo "❌ Not inside a git repository."
+        return 1
+    }
+
+    local ai_dir="$root/$RALPH_AI_DIR"
+    
+    echo "🤖 Initializing Ralph execution workflow..."
+    echo "📁 AI directory: $ai_dir"
+    
+    mkdir -p "$ai_dir"
+    
+    # Check if EXPLORE.md exists for seeding
+    local explore_file="$ai_dir/EXPLORE.md"
+    local has_explore=false
+    if [ "$from_explore" = true ] && [ -f "$explore_file" ]; then
+        has_explore=true
+        if [ "$auto_translate" = true ]; then
+            echo "🤖 Found exploration notes - using AI to translate EXPLORE.md"
+        else
+            echo "📋 Found exploration notes - seeding from EXPLORE.md"
+        fi
+    fi
+    
+    # Create SPEC.md template if missing
+    if [ ! -f "$ai_dir/SPEC.md" ]; then
+        if [ "$has_explore" = true ] && [ "$auto_translate" = true ]; then
+            echo "🤖 Generating SPEC.md from EXPLORE.md using AI (deep thinking model)..."
+            
+            local spec_content
+            if [ -n "$RALPH_TRANSLATION_MODEL" ]; then
+                spec_content=$(copilot --model "$RALPH_TRANSLATION_MODEL" -p "Read the exploration log below and extract a specification document.
+
+Extract:
+1. Technical constraints from 'Key findings' section  
+2. Requirements and non-negotiables
+3. Acceptance criteria based on 'Follow-up' section
+
+Output markdown with these sections:
+
+## Constraints
+(bullet list of technical constraints)
+
+## Acceptance Criteria
+(convert follow-up items to checkboxes: - [ ] description)
+
+## Context
+(brief summary referencing EXPLORE.md)
+
+Exploration log:
+$(cat "$explore_file")
+
+Output ONLY the markdown sections (no explanations, no heading)." 2>&1 | sed '/^Total usage/,$ d' || echo "")
+            else
+                spec_content=$(copilot -p "Read the exploration log below and extract a specification document.
+
+Extract:
+1. Technical constraints from 'Key findings' section  
+2. Requirements and non-negotiables
+3. Acceptance criteria based on 'Follow-up' section
+
+Output markdown with these sections:
+
+## Constraints
+(bullet list of technical constraints)
+
+## Acceptance Criteria
+(convert follow-up items to checkboxes: - [ ] description)
+
+## Context
+(brief summary referencing EXPLORE.md)
+
+Exploration log:
+$(cat "$explore_file")
+
+Output ONLY the markdown sections (no explanations, no heading)." 2>&1 | sed '/^Total usage/,$ d' || echo "")
+            fi
+            
+            if [ -n "$spec_content" ] && [ "$(echo "$spec_content" | wc -w)" -gt 10 ]; then
+                cat > "$ai_dir/SPEC.md" <<EOF
+# Specification
+
+$spec_content
+
+<!-- Auto-generated from EXPLORE.md - review and refine as needed -->
+EOF
+                echo "✅ Created SPEC.md (AI-generated)"
+            else
+                echo "⚠️  AI generation failed, falling back to template"
+                auto_translate=false
+            fi
+        fi
+        
+        if [ ! -f "$ai_dir/SPEC.md" ]; then
+            if [ "$has_explore" = true ]; then
+                cat > "$ai_dir/SPEC.md" <<'EOF'
+# Specification
+
+## Constraints
+
+<!-- Translate key findings and technical constraints from EXPLORE.md here -->
+
+Example:
+- Retry logic must not exceed request timeout budget
+- All API responses must include trace IDs
+- Database writes must be idempotent
+
+## Acceptance Criteria
+
+<!-- Define measurable "done" criteria based on exploration goals -->
+
+Example:
+- [ ] S3 adapter implements bounded retry with exponential backoff
+- [ ] Retry count is configurable via environment variable
+- [ ] Tests verify timeout boundary is respected
+
+## Context
+
+<!-- Reference: See EXPLORE.md for detailed investigation notes -->
+
+EOF
+                echo "✅ Created SPEC.md"
+            else
+                cat > "$ai_dir/SPEC.md" <<'EOF'
+# Specification
+
+## Constraints
+
+List hard constraints, requirements, and non-negotiables here.
+
+Example:
+- Retry logic must not exceed request timeout budget
+- All API responses must include trace IDs
+- Database writes must be idempotent
+
+## Acceptance Criteria
+
+Define what "done" looks like for this work.
+
+Example:
+- [ ] S3 adapter implements bounded retry with exponential backoff
+- [ ] Retry count is configurable via environment variable
+- [ ] Tests verify timeout boundary is respected
+
+## Context
+
+Background information, links to designs, architectural decisions.
+
+EOF
+                echo "✅ Created SPEC.md"
+            fi
+        fi
+    else
+        echo "ℹ️  SPEC.md already exists"
+    fi
+    
+    # Create PLAN.md template if missing
+    if [ ! -f "$ai_dir/PLAN.md" ]; then
+        if [ "$has_explore" = true ] && [ "$auto_translate" = true ]; then
+            echo "🤖 Generating PLAN.md from EXPLORE.md using AI (deep thinking model)..."
+            local plan_content
+            if [ -n "$RALPH_TRANSLATION_MODEL" ]; then
+                plan_content=$(copilot --model "$RALPH_TRANSLATION_MODEL" -p "Read the exploration log and create a plan document.
+
+Extract:
+1. Proposed strategy and architecture from key findings
+2. Files touched (for dependencies section)
+3. Open questions (convert to risks with mitigations)
+
+Output markdown with:
+
+## Architecture
+(technical approach and design decisions)
+
+## Dependencies
+(files touched and external dependencies)
+
+## Risks
+(open questions as risks with mitigation strategies)
+
+Exploration log:
+$(cat "$explore_file")
+
+Output ONLY the markdown sections." 2>&1 | sed '/^Total usage/,$ d' || echo "")
+            else
+                plan_content=$(copilot -p "Read the exploration log and create a plan document.
+
+Extract:
+1. Proposed strategy and architecture from key findings
+2. Files touched (for dependencies section)
+3. Open questions (convert to risks with mitigations)
+
+Output markdown with:
+
+## Architecture
+(technical approach and design decisions)
+
+## Dependencies
+(files touched and external dependencies)
+
+## Risks
+(open questions as risks with mitigation strategies)
+
+Exploration log:
+$(cat "$explore_file")
+
+Output ONLY the markdown sections." 2>&1 | sed '/^Total usage/,$ d' || echo "")
+            fi
+            
+            if [ -n "$plan_content" ] && [ "$(echo "$plan_content" | wc -w)" -gt 10 ]; then
+                cat > "$ai_dir/PLAN.md" <<EOF
+# Plan
+
+$plan_content
+
+<!-- Auto-generated from EXPLORE.md - review and refine as needed -->
+EOF
+                echo "✅ Created PLAN.md (AI-generated)"
+            else
+                echo "⚠️  AI generation failed, falling back to template"
+            fi
+        fi
+        
+        if [ ! -f "$ai_dir/PLAN.md" ]; then
+            if [ "$has_explore" = true ]; then
+                cat > "$ai_dir/PLAN.md" <<'EOF'
+# Plan
+
+## Architecture
+
+<!-- Translate proposed strategy and approach from EXPLORE.md here -->
+
+Example:
+- Add retry logic at the S3Client wrapper layer
+- Use exponential backoff: 100ms, 200ms, 400ms, 800ms
+- Maximum 4 retries (5 total attempts)
+- Respect existing request timeout
+
+## Dependencies
+
+<!-- List files touched and components affected from EXPLORE.md -->
+
+External dependencies, libraries, or prerequisites.
+
+## Risks
+
+<!-- Convert open questions from EXPLORE.md into risks and mitigation strategies -->
+
+Known risks and mitigation strategies.
+
+<!-- Reference: See EXPLORE.md for detailed findings -->
+
+EOF
+                echo "✅ Created PLAN.md"
+            else
+                cat > "$ai_dir/PLAN.md" <<'EOF'
+# Plan
+
+## Architecture
+
+High-level approach and design decisions.
+
+Example:
+- Add retry logic at the S3Client wrapper layer
+- Use exponential backoff: 100ms, 200ms, 400ms, 800ms
+- Maximum 4 retries (5 total attempts)
+- Respect existing request timeout
+
+## Dependencies
+
+External dependencies, libraries, or prerequisites.
+
+## Risks
+
+Known risks and mitigation strategies.
+
+EOF
+                echo "✅ Created PLAN.md"
+            fi
+        fi
+    else
+        echo "ℹ️  PLAN.md already exists"
+    fi
+    
+    # Create TASKS.md template if missing
+    if [ ! -f "$ai_dir/TASKS.md" ]; then
+        if [ "$has_explore" = true ] && [ "$auto_translate" = true ]; then
+            echo "🤖 Generating TASKS.md from EXPLORE.md using AI (deep thinking model)..."
+            local tasks_content
+            if [ -n "$RALPH_TRANSLATION_MODEL" ]; then
+                tasks_content=$(copilot --model "$RALPH_TRANSLATION_MODEL" -p "Read the exploration log and create a task list.
+
+Convert follow-up actions to concrete tasks using this format:
+- [ ] TASK-001: <type>: <description>
+
+Where <type> is: feat, fix, refactor, test, docs, or chore
+
+Make tasks specific and implementable based on files touched and proposed changes.
+
+Output format:
+## Backlog
+(task list here)
+
+Exploration log:
+$(cat "$explore_file")
+
+Output ONLY the ## Backlog section with tasks." 2>&1 | sed '/^Total usage/,$ d' || echo "")
+            else
+                tasks_content=$(copilot -p "Read the exploration log and create a task list.
+
+Convert follow-up actions to concrete tasks using this format:
+- [ ] TASK-001: <type>: <description>
+
+Where <type> is: feat, fix, refactor, test, docs, or chore
+
+Make tasks specific and implementable based on files touched and proposed changes.
+
+Output format:
+## Backlog
+(task list here)
+
+Exploration log:
+$(cat "$explore_file")
+
+Output ONLY the ## Backlog section with tasks." 2>&1 | sed '/^Total usage/,$ d' || echo "")
+            fi
+            
+            if [ -n "$tasks_content" ] && [ "$(echo "$tasks_content" | wc -w)" -gt 10 ]; then
+                cat > "$ai_dir/TASKS.md" <<EOF
+# Tasks
+
+Actionable, granular tasks for incremental implementation.
+
+**Format:** \`- [ ] TASK-XXX: <type>: <description> [PPL-####]\`
+
+Commit types: feat, fix, perf, refactor, docs, test, build, ci, chore, style, revert
+
+$tasks_content
+
+## Completed
+
+<!-- Completed tasks move here automatically -->
+
+<!-- Auto-generated from EXPLORE.md - review and refine as needed -->
+EOF
+                echo "✅ Created TASKS.md (AI-generated)"
+            else
+                echo "⚠️  AI generation failed, falling back to template"
+            fi
+        fi
+        
+        if [ ! -f "$ai_dir/TASKS.md" ]; then
+            if [ "$has_explore" = true ]; then
+                cat > "$ai_dir/TASKS.md" <<'EOF'
+# Tasks
+
+Actionable, granular tasks for incremental implementation.
+
+**Format:** `- [ ] TASK-XXX: <type>: <description> [PPL-####]`
+
+Commit types: feat, fix, perf, refactor, docs, test, build, ci, chore, style, revert
+
+Examples:
+- [ ] TASK-001: feat: add retry logic to S3 adapter [PPL-123]
+- [ ] TASK-002: fix: handle timeout edge case [PPL-124]
+- [ ] TASK-003: test: add retry boundary tests [PPL-123]
+
+## Backlog
+
+<!-- Translate follow-up actions from EXPLORE.md into concrete tasks here -->
+<!-- Reference files touched from EXPLORE.md for implementation scope -->
+
+- [ ] TASK-001: feat: initialize project structure
+- [ ] TASK-002: feat: add first feature implementation [PPL-123]
+
+## Completed
+
+<!-- Completed tasks move here automatically -->
+
+<!-- Reference: See EXPLORE.md for investigation context -->
+
+EOF
+                echo "✅ Created TASKS.md"
+            else
+                cat > "$ai_dir/TASKS.md" <<'EOF'
+# Tasks
+
+Actionable, granular tasks for incremental implementation.
+
+**Format:** `- [ ] TASK-XXX: <type>: <description> [PPL-####]`
+
+Commit types: feat, fix, perf, refactor, docs, test, build, ci, chore, style, revert
+
+Examples:
+- [ ] TASK-001: feat: add retry logic to S3 adapter [PPL-123]
+- [ ] TASK-002: fix: handle timeout edge case [PPL-124]
+- [ ] TASK-003: test: add retry boundary tests [PPL-123]
+
+## Backlog
+
+- [ ] TASK-001: feat: initialize project structure
+- [ ] TASK-002: feat: add first feature implementation [PPL-123]
+
+## Completed
+
+<!-- Completed tasks move here automatically -->
+
+EOF
+                echo "✅ Created TASKS.md"
+            fi
+        fi
+    else
+        echo "ℹ️  TASKS.md already exists"
+    fi
+    
+    # Add ai/ to .git/info/exclude (local only, never committed)
+    local git_dir
+    git_dir="$(cd "$root" && git rev-parse --absolute-git-dir 2>/dev/null || git rev-parse --git-dir)"
+    local exclude_file="$git_dir/info/exclude"
+    
+    # Ensure directory exists
+    if [ ! -d "$(dirname "$exclude_file")" ]; then
+        mkdir -p "$(dirname "$exclude_file")" 2>/dev/null || {
+            echo "⚠️  Could not create git info directory"
+            return 0
+        }
+    fi
+    
+    # Ensure exclude file exists
+    if [ ! -f "$exclude_file" ]; then
+        touch "$exclude_file" 2>/dev/null || {
+            echo "⚠️  Could not create exclude file"
+            return 0
+        }
+    fi
+    
+    if ! grep -qx "$RALPH_AI_DIR/" "$exclude_file" 2>/dev/null; then
+        printf '\n# Ralph AI planning artifacts (local only)\n%s/\n' "$RALPH_AI_DIR" >> "$exclude_file"
+        echo "✅ Added $RALPH_AI_DIR/ to .git/info/exclude (local only)"
+    else
+        echo "ℹ️  $RALPH_AI_DIR/ already in .git/info/exclude"
+    fi
+    
+    echo "ℹ️  Note: .git/info/exclude is local to your machine only"
+    echo "   Other developers won't see ai/ excluded unless they also run 'ralph init'"
+    
+    echo ""
+    echo "✅ Ralph workflow initialized!"
+    echo ""
+    if [ "$has_explore" = true ]; then
+        if [ "$auto_translate" = true ]; then
+            echo "🤖 AI-powered translation complete"
+            echo ""
+            echo "Next steps:"
+            echo "  1. Review ai/SPEC.md - verify AI-extracted constraints"
+            echo "  2. Review ai/PLAN.md - refine AI-generated architecture"
+            echo "  3. Review ai/TASKS.md - validate AI-generated tasks"
+            echo "  4. Run: ralph loop"
+        else
+            echo "📋 Templates seeded with EXPLORE.md references"
+            echo ""
+            echo "Next steps:"
+            echo "  1. Review ai/EXPLORE.md findings"
+            echo "  2. Edit ai/SPEC.md - translate constraints and acceptance criteria"
+            echo "  3. Edit ai/PLAN.md - formalize architecture from exploration"
+            echo "  4. Edit ai/TASKS.md - convert follow-up actions to tasks"
+            echo "  5. Run: ralph loop"
+        fi
+    else
+        echo "Next steps:"
+        echo "  1. Edit ai/SPEC.md - define constraints and acceptance criteria"
+        echo "  2. Edit ai/PLAN.md - document architecture decisions"
+        echo "  3. Edit ai/TASKS.md - break work into granular tasks"
+        echo "  4. Run: ralph loop"
+        echo ""
+        echo "💡 Tip: Use 'ralph init --from-explore --auto' for AI-powered translation"
+    fi
+}
+
+# Get the first unchecked task
+ralph_task() {
+    local root
+    root="$(_ralph_root)" || {
+        echo "❌ Not inside a git repository."
+        return 1
+    }
+    
+    local tasks_file="$root/$RALPH_AI_DIR/TASKS.md"
+    
+    if [ ! -f "$tasks_file" ]; then
+        echo "❌ No TASKS.md found. Run: ralph init"
+        return 1
+    fi
+    
+    local next_task
+    next_task=$(grep -m1 "^- \[ \]" "$tasks_file" || true)
+    
+    if [ -z "$next_task" ]; then
+        echo "🎉 No unchecked tasks remaining!"
+        return 0
+    fi
+    
+    echo "$next_task" | sed 's/^- \[ \] //'
+}
+
+# Mark a task as complete
+ralph_complete() {
+    local task_id="${1:-}"
+    
+    if [ -z "$task_id" ]; then
+        echo "❌ Usage: ralph complete TASK-XXX"
+        return 1
+    fi
+    
+    local root
+    root="$(_ralph_root)" || {
+        echo "❌ Not inside a git repository."
+        return 1
+    }
+    
+    local tasks_file="$root/$RALPH_AI_DIR/TASKS.md"
+    
+    if [ ! -f "$tasks_file" ]; then
+        echo "❌ No TASKS.md found."
+        return 1
+    fi
+    
+    # Mark task as complete (macOS compatible)
+    if command -v gsed >/dev/null 2>&1; then
+        gsed -i "s/^- \[ \] \($task_id\)/- [x] \1/" "$tasks_file"
+    else
+        sed -i.bak "s/^- \[ \] \($task_id\)/- [x] \1/" "$tasks_file"
+        rm -f "$tasks_file.bak"
+    fi
+    
+    echo "✅ Marked $task_id as complete"
+}
+
+# Interactive Ralph loop
+ralph_loop() {
+    local root
+    root="$(_ralph_root)" || {
+        echo "❌ Not inside a git repository."
+        return 1
+    }
+    
+    if [ ! -d "$root/$RALPH_AI_DIR" ]; then
+        echo "❌ Ralph not initialized. Run: ralph init"
+        return 1
+    fi
+    
+    echo "🤖 Starting Ralph execution loop..."
+    echo ""
+    
+    local iteration=1
+    
+    while true; do
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "Iteration $iteration"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo ""
+        
+        local next_task
+        next_task=$(ralph_task)
+        
+        if [ -z "$next_task" ] || [[ "$next_task" =~ "No unchecked tasks" ]]; then
+            echo "🎉 All tasks complete!"
+            break
+        fi
+        
+        echo "📋 Next task:"
+        echo "   $next_task"
+        echo ""
+        
+        # Extract task ID for commit message
+        local task_id
+        task_id=$(echo "$next_task" | grep -o 'TASK-[0-9]\+' || echo "task")
+        
+        echo "🤖 Calling Copilot CLI (fast execution model)..."
+        echo ""
+        
+        # Call GitHub Copilot CLI with Ralph prompt using fast execution tier
+        if [ -n "$RALPH_EXECUTION_MODEL" ]; then
+            copilot --model "$RALPH_EXECUTION_MODEL" -p "You are a worker agent executing a single task.
+
+Read these files in the repository:
+- $RALPH_AI_DIR/SPEC.md (constraints and acceptance criteria)
+- $RALPH_AI_DIR/PLAN.md (architecture and approach)
+- $RALPH_AI_DIR/TASKS.md (task list)
+
+Current task: $next_task
+
+Rules:
+- Implement ONLY this task
+- Do not explore alternatives or deviate from the plan
+- Do not modify planning files (SPEC.md, PLAN.md, TASKS.md)
+- Leave TODO comments if blocked
+- Make minimal, surgical changes
+- Follow the architecture defined in PLAN.md
+
+After implementation:
+- Confirm when complete or report blockers
+- Show what files were changed"
+        else
+            copilot -p "You are a worker agent executing a single task.
+
+Read these files in the repository:
+- $RALPH_AI_DIR/SPEC.md (constraints and acceptance criteria)
+- $RALPH_AI_DIR/PLAN.md (architecture and approach)
+- $RALPH_AI_DIR/TASKS.md (task list)
+
+Current task: $next_task
+
+Rules:
+- Implement ONLY this task
+- Do not explore alternatives or deviate from the plan
+- Do not modify planning files (SPEC.md, PLAN.md, TASKS.md)
+- Leave TODO comments if blocked
+- Make minimal, surgical changes
+- Follow the architecture defined in PLAN.md
+
+After implementation:
+- Confirm when complete or report blockers
+- Show what files were changed"
+        fi
+        
+        echo ""
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        
+        # Check if there are changes
+        if git diff --quiet; then
+            echo "⚠️  No changes detected."
+            printf "Mark task as blocked/skip? [y/N] "
+            read -r skip_ans
+            if [ "${skip_ans:-N}" = "y" ] || [ "${skip_ans:-N}" = "Y" ]; then
+                iteration=$((iteration + 1))
+                continue
+            else
+                break
+            fi
+        fi
+        
+        # Show diff
+        echo ""
+        echo "📊 Changes:"
+        git --no-pager diff --stat
+        echo ""
+        
+        # Validation prompt (optional)
+        printf "Validate before commit? [y/N] "
+        read -r validate_ans
+        
+        if [ "$validate_ans" = "y" ] || [ "$validate_ans" = "Y" ]; then
+            echo ""
+            ralph_validate
+            echo ""
+        fi
+        
+        # Commit prompt
+        printf "Commit these changes? [Y/n] "
+        read -r commit_ans
+        
+        if [ -z "${commit_ans}" ] || [ "$commit_ans" = "y" ] || [ "$commit_ans" = "Y" ]; then
+            # Extract Jira key if present (e.g., [PPL-123] or PPL-123)
+            local jira_key
+            jira_key=$(echo "$next_task" | grep -o '\[*PPL-[0-9]\+\]*' | tr -d '[]' || true)
+            
+            # Extract commit type and description (format: "TASK-XXX: type: description")
+            local task_desc
+            task_desc=$(echo "$next_task" | sed "s/^TASK-[0-9]\+: //" | sed 's/\[*PPL-[0-9]\+\]*//g' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
+            
+            # Build commit message following Conventional Commits
+            local commit_msg
+            if [ -n "$jira_key" ]; then
+                commit_msg="$task_desc [$jira_key]"
+            else
+                commit_msg="$task_desc"
+            fi
+            
+            git add -A
+            git commit -m "$commit_msg"
+            echo "✅ Committed: $commit_msg"
+            
+            # Mark task complete
+            ralph_complete "$task_id"
+        else
+            echo "⏭️  Skipping commit"
+        fi
+        
+        echo ""
+        printf "Continue to next task? [Y/n] "
+        read -r continue_ans
+        
+        if [ -n "$continue_ans" ] && [ "$continue_ans" != "y" ] && [ "$continue_ans" != "Y" ]; then
+            echo "🛑 Stopping loop"
+            break
+        fi
+        
+        iteration=$((iteration + 1))
+        echo ""
+    done
+    
+    echo ""
+    echo "🏁 Ralph loop finished after $iteration iteration(s)"
+}
+
+# Quick commit with task ID extraction
+ralph_commit() {
+    local message="${1:-}"
+    
+    if [ -z "$message" ]; then
+        echo "❌ Usage: ralph commit 'commit message'"
+        return 1
+    fi
+    
+    git add -A
+    git commit -m "$message"
+    
+    # Auto-mark task complete if message contains TASK-XXX
+    local task_id
+    task_id=$(echo "$message" | grep -o 'TASK-[0-9]\+' || true)
+    
+    if [ -n "$task_id" ]; then
+        ralph_complete "$task_id"
+    fi
+}
+
+# Show Ralph status
+ralph_status() {
+    local root
+    root="$(_ralph_root)" || {
+        echo "❌ Not inside a git repository."
+        return 1
+    }
+    
+    echo "Ralph Status"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    
+    if [ ! -d "$root/$RALPH_AI_DIR" ]; then
+        echo "❌ Not initialized (run: ralph init)"
+        return 1
+    fi
+    
+    echo "✅ Initialized"
+    echo ""
+    
+    local tasks_file="$root/$RALPH_AI_DIR/TASKS.md"
+    
+    if [ -f "$tasks_file" ]; then
+        local total
+        total=$(grep -c "^- \[.\]" "$tasks_file" || echo "0")
+        local completed
+        completed=$(grep -c "^- \[x\]" "$tasks_file" || echo "0")
+        local remaining
+        remaining=$(grep -c "^- \[ \]" "$tasks_file" || echo "0")
+        
+        echo "📊 Tasks:"
+        echo "   Total:      $total"
+        echo "   Completed:  $completed"
+        echo "   Remaining:  $remaining"
+        echo ""
+        
+        if [ "$remaining" -gt 0 ]; then
+            echo "📋 Next task:"
+            ralph_task | sed 's/^/   /'
+        else
+            echo "🎉 All tasks complete!"
+        fi
+    fi
+    
+    echo ""
+    echo "📁 Files:"
+    ls -lh "$root/$RALPH_AI_DIR" | tail -n +2 | awk '{print "   " $9 " (" $5 ")"}'
+}
+
+# Validate current changes against spec
+ralph_validate() {
+    local root
+    root="$(_ralph_root)" || {
+        echo "❌ Not inside a git repository."
+        return 1
+    }
+    
+    if [ ! -d "$root/$RALPH_AI_DIR" ]; then
+        echo "❌ Ralph not initialized. Run: ralph init"
+        return 1
+    fi
+    
+    # Check if there are changes to validate
+    if git diff --quiet && git diff --cached --quiet; then
+        echo "⚠️  No changes to validate."
+        return 0
+    fi
+    
+    echo "🔍 Validating changes (smart validation model)..."
+    echo ""
+    
+    # Get current task
+    local current_task
+    current_task=$(ralph_task)
+    
+    # Show diff stats
+    echo "📊 Changes to validate:"
+    git --no-pager diff --stat HEAD
+    echo ""
+    
+    # Call GitHub Copilot CLI with validation prompt using smart model
+    if [ -n "$RALPH_VALIDATION_MODEL" ]; then
+        copilot --model "$RALPH_VALIDATION_MODEL" -p "You are a validation agent reviewing code changes.
+
+Read these files in the repository:
+- $RALPH_AI_DIR/SPEC.md (constraints and acceptance criteria)
+- $RALPH_AI_DIR/PLAN.md (architecture and approach)
+- $RALPH_AI_DIR/TASKS.md (task list)
+
+Current task being validated: $current_task
+
+Review the git diff and verify:
+
+1. **Correctness**: Do changes match the task description?
+2. **Completeness**: Is the task fully implemented (no missing pieces)?
+3. **Constraints**: Do changes respect constraints in SPEC.md?
+4. **Architecture**: Do changes follow the approach in PLAN.md?
+5. **Safety**: Are there any bugs, security issues, or edge cases missed?
+6. **Scope**: Are changes minimal and focused on this task only?
+
+Output format:
+✅ PASS or ❌ FAIL
+- List specific issues found (if any)
+- Suggest fixes for any problems
+- Confirm if ready to commit or needs revision"
+    else
+        copilot -p "You are a validation agent reviewing code changes.
+
+Read these files in the repository:
+- $RALPH_AI_DIR/SPEC.md (constraints and acceptance criteria)
+- $RALPH_AI_DIR/PLAN.md (architecture and approach)
+- $RALPH_AI_DIR/TASKS.md (task list)
+
+Current task being validated: $current_task
+
+Review the git diff and verify:
+
+1. **Correctness**: Do changes match the task description?
+2. **Completeness**: Is the task fully implemented (no missing pieces)?
+3. **Constraints**: Do changes respect constraints in SPEC.md?
+4. **Architecture**: Do changes follow the approach in PLAN.md?
+5. **Safety**: Are there any bugs, security issues, or edge cases missed?
+6. **Scope**: Are changes minimal and focused on this task only?
+
+Output format:
+✅ PASS or ❌ FAIL
+- List specific issues found (if any)
+- Suggest fixes for any problems
+- Confirm if ready to commit or needs revision"
+    fi
+    
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+}
+
+ralph_help() {
+    cat <<'EOF'
+Usage:
+  ralph <command> [args]
+
+Commands:
+  init [OPTIONS]         Initialize Ralph workflow (creates ai/ structure)
+    --from-explore       Seed templates with EXPLORE.md references (manual)
+    --auto               Use AI to translate EXPLORE.md (requires --from-explore)
+  loop                   Run interactive execution loop
+  task                   Show next unchecked task
+  complete TASK-ID       Mark a task as complete
+  commit "message"       Commit with Conventional Commits format
+  validate               Validate current changes against SPEC/PLAN
+  status                 Show workflow status and progress
+  help                   Show this help
+
+Workflow:
+  # Option 1: Start from scratch
+  1. ralph init                    # Set up ai/ directory
+  2. Edit ai/SPEC.md               # Define constraints
+  3. Edit ai/PLAN.md               # Document architecture
+  4. Edit ai/TASKS.md              # List tasks
+  5. ralph loop                    # Execute tasks with Copilot
+
+  # Option 2: Start from exploration (manual)
+  1. explore start                 # Investigate and document
+  2. explore save-notes            # Export to main repo
+  3. ralph init --from-explore     # Seed templates from EXPLORE.md
+  4. Edit ai/SPEC/PLAN/TASKS       # Translate findings
+  5. ralph loop                    # Execute tasks
+
+  # Option 3: Start from exploration (AI-powered)
+  1. explore start                 # Investigate and document
+  2. explore save-notes            # Export to main repo
+  3. ralph init --from-explore --auto   # AI translates EXPLORE.md
+  4. Review ai/SPEC/PLAN/TASKS     # Verify and refine
+  5. ralph loop                    # Execute tasks
+
+Task Format (in ai/TASKS.md):
+  - [ ] TASK-001: feat: add retry logic [PPL-123]
+  - [ ] TASK-002: fix: handle edge case [PPL-124]
+
+Commit Message Format (Conventional Commits):
+  <type>: <description> [PPL-####]
+  
+  Types: feat, fix, perf, refactor, docs, test, build, ci, chore, style, revert
+  
+  Examples:
+    feat: add retry logic to S3 adapter [PPL-123]
+    fix: handle timeout edge case [PPL-124]
+    test: add retry boundary tests [PPL-123]
+
+Integration:
+  - Use 'explore start' for exploration/discovery
+  - Use 'explore save-notes' to export findings to ai/EXPLORE.md
+  - Use 'ralph init --from-explore' to seed templates
+  - Use 'ralph loop' for deterministic execution
+  - Use 'ralph validate' before committing to review changes
+  - ai/ excluded via .git/info/exclude (run 'ralph init' per repo)
+
+Model Tiers (optional configuration):
+  RALPH_TRANSLATION_MODEL   Deep thinking for EXPLORE.md translation
+                            (e.g., claude-sonnet, o3-mini)
+  RALPH_EXECUTION_MODEL     Fast execution for task implementation
+                            (e.g., claude-haiku, gpt-4o-mini)
+  RALPH_VALIDATION_MODEL    Smart validation before commits
+                            (e.g., claude-sonnet, gpt-4o)
+  
+  Set via environment or leave empty for default model selection.
+
+Environment:
+  RALPH_AI_DIR              AI directory name (default: ai)
+  RALPH_TRANSLATION_MODEL   Model for init --auto (default: claude-sonnet-4.5)
+  RALPH_EXECUTION_MODEL     Model for loop (default: gpt-5.1)
+  RALPH_VALIDATION_MODEL    Model for validate (default: claude-opus-4.5)
+
+Examples:
+  ralph init                              # Blank templates
+  ralph init --from-explore               # Manual translation hints
+  ralph init --from-explore --auto        # AI-powered translation
+  ralph loop                              # Execute tasks
+  ralph validate                          # Review changes
+  ralph commit "feat: add retry logic [PPL-123]"
+  ralph status
+  
+  # With custom models
+  export RALPH_EXECUTION_MODEL="claude-haiku"
+  ralph loop
+EOF
+}
+
+# Main entry point
+main() {
+    local cmd="${1:-help}"
+    shift 2>/dev/null || true
+    
+    case "$cmd" in
+        init)
+            ralph_init "$@"
+            ;;
+        loop)
+            ralph_loop "$@"
+            ;;
+        task)
+            ralph_task "$@"
+            ;;
+        complete)
+            ralph_complete "$@"
+            ;;
+        commit)
+            ralph_commit "$@"
+            ;;
+        validate)
+            ralph_validate "$@"
+            ;;
+        status)
+            ralph_status "$@"
+            ;;
+        help|-h|--help)
+            ralph_help
+            ;;
+        *)
+            echo "❌ Unknown ralph command: $cmd"
+            echo ""
+            ralph_help
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"

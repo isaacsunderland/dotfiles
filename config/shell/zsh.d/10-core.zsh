@@ -1,6 +1,15 @@
 # Core zsh behavior and keybindings.
 
-autoload -U compinit && compinit
+# Completion with caching (regenerate daily)
+autoload -Uz compinit
+_comp_cache="$HOME/.cache/zcompdump"
+if [[ -n ${_comp_cache}(#qN.mh+24) ]]; then
+    compinit -d "$_comp_cache"
+else
+    compinit -C -d "$_comp_cache"
+fi
+unset _comp_cache
+
 autoload bashcompinit && bashcompinit
 
 setopt prompt_subst
