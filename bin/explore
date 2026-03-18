@@ -284,6 +284,15 @@ explore_start() {
     # Install safety guard
     _install_explore_guard
 
+    # Symlink common gitignored directories to save space
+    local symlink_targets=("node_modules" ".venv" "vendor" "data" ".next" "dist" "build" "__pycache__")
+    for target in "${symlink_targets[@]}"; do
+        if [ -d "$root/$target" ] && [ ! -e "$wt/$target" ]; then
+            ln -s "$root/$target" "$wt/$target"
+            echo "🔗 Symlinked: $target"
+        fi
+    done
+
     # Seed optional exploration notes
     mkdir -p "$wt/ai"
     touch "$wt/ai/EXPLORE.md"
@@ -441,6 +450,8 @@ explore_save_notes() {
 
 # Remove explore worktree safely
 explore_stop() {
+    local root
+    root="$(_git_root)"
     local wt
     wt="$(_explore_path)"
     local current_branch
@@ -454,6 +465,14 @@ explore_stop() {
 
     local exp_branch
     exp_branch="$(cd "$wt" && git rev-parse --abbrev-ref HEAD)"
+    
+    # Warn if currently in explore worktree
+    local current_dir
+    current_dir="$(pwd -P 2>/dev/null || pwd)"
+    if [[ "$current_dir" == "$wt"* ]]; then
+        echo "⚠️  You are currently in the explore worktree that will be deleted."
+        echo "   After removal, you'll need to: cd $root"
+    fi
 
     # Offer to save exploration notes before deleting the worktree.
     if [ -f "$wt/ai/EXPLORE.md" ] && [ -s "$wt/ai/EXPLORE.md" ]; then
@@ -486,6 +505,13 @@ explore_stop() {
         echo "❌ Failed to remove worktree"
         return 1
     }
+
+    # Print helpful message if user was in the deleted worktree
+    if [[ "$current_dir" == "$wt"* ]]; then
+        echo ""
+        echo "📌 Run this to return to main repo:"
+        echo "   cd $root"
+    fi
 
     # Offer to reset explore branch (only non-interactive if --force)
     if [ "$force_flag" = "--force" ]; then

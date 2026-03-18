@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Ralph-style execution loop helpers for deterministic, incremental development.
 # Usage: ralph [init|loop|task|commit|status|validate|help]
-# Works in the main/master worktree - exploration happens in explore worktree
+# Execution happens in isolated worktrees to avoid conflicts with main worktree.
 
 set -euo pipefail
 
 # Configuration
 RALPH_AI_DIR="${RALPH_AI_DIR:-ai}"
+RALPH_WORKTREE_PREFIX="${RALPH_WORKTREE_PREFIX:-.ralph}"
+RALPH_BRANCH_PREFIX="${RALPH_BRANCH_PREFIX:-ralph}"
 
 # Model tier strategy (can be overridden via environment)
 # Tier 1: Deep thinking (translation) - claude-sonnet-4.5 for context understanding
@@ -16,12 +18,28 @@ export RALPH_TRANSLATION_MODEL="${RALPH_TRANSLATION_MODEL:-claude-sonnet-4.5}"
 export RALPH_EXECUTION_MODEL="${RALPH_EXECUTION_MODEL:-gpt-5.1}"
 export RALPH_VALIDATION_MODEL="${RALPH_VALIDATION_MODEL:-claude-opus-4.5}"
 
-# Resolve repo root (always returns main repo, never explore worktree)
+# Build a branch-safe suffix from a base branch name.
+_sanitize_branch_component() {
+    local value="${1:-}"
+    value="${value//\//-}"
+    value="${value// /-}"
+    value="$(printf '%s' "$value" | tr -cs '[:alnum:]._-' '-')"
+    value="${value#-}"
+    value="${value%-}"
+
+    if [ -z "$value" ]; then
+        value="root"
+    fi
+
+    echo "$value"
+}
+
+# Resolve repo root (always returns main repo, never explore/ralph worktree)
 _ralph_root() {
     local root
     root="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1
     
-    # If we're in an explore worktree, navigate to the main repo
+    # If we're in an explore or ralph worktree, navigate to the main repo
     local basename_name
     basename_name="$(basename "$root")"
     local explore_prefix="${GIT_EXPLORE_PREFIX:-.explore}"
@@ -31,9 +49,236 @@ _ralph_root() {
         local main_repo_name="${basename_name#${explore_prefix}-}"
         # Navigate to parent and then to main repo
         root="$(cd "$root/.." && pwd)/$main_repo_name"
+    elif [[ "$basename_name" =~ ^${RALPH_WORKTREE_PREFIX}- ]]; then
+        # Strip ralph prefix to get main repo name
+        local main_repo_name="${basename_name#${RALPH_WORKTREE_PREFIX}-}"
+        root="$(cd "$root/.." && pwd)/$main_repo_name"
     fi
     
     echo "$root"
+}
+
+# Derive a short, filesystem-safe repo name (directory name)
+_ralph_repo_name() {
+    local root
+    root="$(_ralph_root)"
+    local basename_name
+    basename_name="$(basename "$root")"
+    echo "$basename_name"
+}
+
+# Get the ralph worktree path
+_ralph_worktree_path() {
+    local root
+    root="$(_ralph_root)"
+    local parent
+    parent="$(cd "$root/.." && pwd)"
+    echo "$parent/${RALPH_WORKTREE_PREFIX}-$(_ralph_repo_name)"
+}
+
+# Get the ralph branch name for the current base branch
+_ralph_branch_name() {
+    local base_branch="${1:-}"
+    echo "${RALPH_BRANCH_PREFIX}-$(_sanitize_branch_component "$base_branch")"
+}
+
+# Check if we're inside a ralph worktree
+_in_ralph_worktree() {
+    local root
+    root="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1
+    local basename_name
+    basename_name="$(basename "$root")"
+    [[ "$basename_name" =~ ^${RALPH_WORKTREE_PREFIX}- ]]
+}
+
+# Create or resume the ralph worktree
+_ralph_worktree_setup() {
+    local root
+    root="$(_ralph_root)" || {
+        echo "❌ Not inside a git repository."
+        return 1
+    }
+    
+    local current_branch
+    current_branch="$(cd "$root" && git rev-parse --abbrev-ref HEAD)"
+    local ralph_branch
+    ralph_branch="$(_ralph_branch_name "$current_branch")"
+    local wt
+    wt="$(_ralph_worktree_path)"
+    
+    # If worktree already exists, just return the path
+    if [ -d "$wt" ]; then
+        echo "$wt"
+        return 0
+    fi
+    
+    echo "🔧 Creating ralph worktree..." >&2
+    
+    # If ralph branch exists, reset it to current branch (to get latest ai/ files)
+    # Otherwise create it fresh
+    if (cd "$root" && git show-ref --verify --quiet "refs/heads/${ralph_branch}"); then
+        echo "   Resetting existing branch: $ralph_branch to $current_branch" >&2
+        (cd "$root" && git branch -f "$ralph_branch" "$current_branch")
+    else
+        (cd "$root" && git branch "$ralph_branch" "$current_branch")
+        echo "   Created branch: $ralph_branch" >&2
+    fi
+    
+    # Create the worktree
+    (cd "$root" && git worktree add "$wt" "$ralph_branch" >&2) || {
+        echo "❌ Failed to create worktree at $wt" >&2
+        return 1
+    }
+    
+    # Copy ai/ directory from main repo to worktree (it's git-ignored)
+    if [ -d "$root/$RALPH_AI_DIR" ]; then
+        echo "   Copying $RALPH_AI_DIR/ to worktree..." >&2
+        cp -R "$root/$RALPH_AI_DIR" "$wt/"
+    else
+        echo "⚠️  Warning: $RALPH_AI_DIR/ not found in main repo" >&2
+    fi
+    
+    echo "   Worktree: $wt" >&2
+    echo "   Branch: $ralph_branch" >&2
+    echo "$wt"
+}
+
+# Remove ralph worktree
+_ralph_worktree_cleanup() {
+    local wt
+    wt="$(_ralph_worktree_path)"
+    
+    if [ ! -d "$wt" ]; then
+        return 0
+    fi
+    
+    local root
+    root="$(_ralph_root)"
+    
+    echo "🧹 Removing ralph worktree..."
+    (cd "$root" && git worktree remove "$wt" --force) || {
+        echo "⚠️  Could not remove worktree automatically"
+        echo "   Manual cleanup: git worktree remove $wt --force"
+        return 1
+    }
+    
+    echo "✅ Worktree removed"
+}
+
+# Create a PR from ralph branch to base branch
+_ralph_create_pr() {
+    local root
+    root="$(_ralph_root)"
+    local wt
+    wt="$(_ralph_worktree_path)"
+    
+    local current_branch
+    current_branch="$(cd "$root" && git rev-parse --abbrev-ref HEAD)"
+    local ralph_branch
+    ralph_branch="$(_ralph_branch_name "$current_branch")"
+    
+    # Check if gh CLI is available
+    if ! command -v gh >/dev/null 2>&1; then
+        echo "⚠️  GitHub CLI (gh) not installed. Manual PR required."
+        echo "   Branch: $ralph_branch → $current_branch"
+        return 1
+    fi
+    
+    # Check for commits to push
+    local commits_ahead
+    commits_ahead="$(cd "$wt" && git rev-list --count "$current_branch..$ralph_branch" 2>/dev/null || echo "0")"
+    
+    if [ "$commits_ahead" = "0" ]; then
+        echo "ℹ️  No commits to create PR for"
+        return 0
+    fi
+    
+    echo "📤 Pushing ralph branch..."
+    (cd "$wt" && git push -u origin "$ralph_branch") || {
+        echo "❌ Failed to push branch"
+        return 1
+    }
+    
+    echo "🔀 Creating pull request..."
+    
+    # Generate PR title - use a summary of completed work
+    local pr_title
+    local completed_count
+    completed_count=$(grep -c "^- \[x\]" "$wt/$RALPH_AI_DIR/TASKS.md" 2>/dev/null || echo "0")
+    
+    if [ "$completed_count" -eq 1 ]; then
+        # Single task - use its description without TASK-XXX
+        local task_desc
+        task_desc=$(grep -m1 "^- \[x\]" "$wt/$RALPH_AI_DIR/TASKS.md" | sed 's/^- \[x\] //' | sed 's/TASK-[0-9]\+: //' | sed 's/ \[PPL-[0-9]\+\].*//' | sed 's/\[PPL-[0-9]\+\]//' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//' || true)
+        pr_title="$task_desc"
+    elif [ "$completed_count" -gt 1 ]; then
+        # Multiple tasks - create a summary
+        # Extract the common theme from first task's type
+        local first_task_type
+        first_task_type=$(grep -m1 "^- \[x\]" "$wt/$RALPH_AI_DIR/TASKS.md" | sed 's/^- \[x\] //' | sed 's/TASK-[0-9]\+: //' | sed 's/:.*//' || echo "chore")
+        pr_title="$first_task_type: complete $completed_count tasks"
+    else
+        # Fallback
+        pr_title="chore: automated task execution"
+    fi
+    
+    # Generate PR body
+    local pr_body
+    pr_body="## Ralph Execution Summary
+
+This PR was created by \`ralph loop\` executing tasks from \`ai/TASKS.md\`.
+
+### Completed Tasks
+"
+    if [ -f "$wt/$RALPH_AI_DIR/TASKS.md" ]; then
+        pr_body+="$(grep "^- \[x\]" "$wt/$RALPH_AI_DIR/TASKS.md" || echo "- No tasks completed")"
+    fi
+    
+    # Check for blocked tasks
+    local blocked
+    blocked=$(grep "^- \[~\]" "$wt/$RALPH_AI_DIR/TASKS.md" 2>/dev/null || echo "")
+    if [ -n "$blocked" ]; then
+        pr_body+="
+
+### Blocked Tasks
+
+These tasks could not be completed automatically:
+
+$blocked"
+    fi
+    
+    # Check for remaining tasks
+    local remaining
+    remaining=$(grep "^- \[ \]" "$wt/$RALPH_AI_DIR/TASKS.md" 2>/dev/null || echo "")
+    if [ -n "$remaining" ]; then
+        pr_body+="
+
+### Remaining Tasks
+
+$remaining"
+    fi
+    
+    # Summary
+    if [ -z "$blocked" ] && [ -z "$remaining" ]; then
+        pr_body+="
+
+### Status
+
+✅ All tasks completed successfully!"
+    fi
+    
+    # Create PR
+    (cd "$wt" && gh pr create \
+        --base "$current_branch" \
+        --head "$ralph_branch" \
+        --title "$pr_title" \
+        --body "$pr_body") || {
+        echo "❌ Failed to create PR"
+        echo "   You can create it manually: gh pr create --base $current_branch --head $ralph_branch"
+        return 1
+    }
+    
+    echo "✅ Pull request created"
 }
 
 # Initialize Ralph workflow structure in current repo
@@ -610,10 +855,33 @@ ralph_loop() {
         return 1
     fi
     
+    # Set up worktree for isolated execution
+    local wt
+    local in_worktree=false
+    
+    if _in_ralph_worktree; then
+        # Already in a ralph worktree, use current directory
+        wt="$(git rev-parse --show-toplevel)"
+        in_worktree=true
+        echo "🔄 Resuming in existing ralph worktree..."
+    else
+        # Create or resume worktree
+        wt="$(_ralph_worktree_setup)" || {
+            echo "❌ Failed to set up ralph worktree"
+            return 1
+        }
+        echo "📂 Working in: $wt"
+    fi
+    
+    echo ""
     echo "🤖 Starting Ralph execution loop..."
     echo ""
     
     local iteration=1
+    local had_commits=false
+    local max_retries=3
+    local retry_count=0
+    local last_task=""
     
     while true; do
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -621,16 +889,46 @@ ralph_loop() {
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         echo ""
         
+        # Get next task from worktree
+        local tasks_file="$wt/$RALPH_AI_DIR/TASKS.md"
         local next_task
-        next_task=$(ralph_task)
+        next_task=$(grep -m1 "^- \[ \]" "$tasks_file" 2>/dev/null | sed 's/^- \[ \] //' || true)
         
-        if [ -z "$next_task" ] || [[ "$next_task" =~ "No unchecked tasks" ]]; then
+        if [ -z "$next_task" ]; then
             echo "🎉 All tasks complete!"
             break
         fi
         
+        # Check if this is the same task as last iteration (retry detection)
+        if [ "$next_task" = "$last_task" ]; then
+            retry_count=$((retry_count + 1))
+            if [ "$retry_count" -ge "$max_retries" ]; then
+                echo "❌ Task failed after $max_retries attempts. Marking as blocked and moving on."
+                local task_id
+                task_id=$(echo "$next_task" | grep -o 'TASK-[0-9]\+' || echo "task")
+                # Mark task as blocked (change [ ] to [~])
+                if command -v gsed >/dev/null 2>&1; then
+                    gsed -i "s/^- \[ \] \($task_id\)/- [~] \1 <!-- BLOCKED: Failed after $max_retries attempts -->/" "$tasks_file"
+                else
+                    sed -i.bak "s/^- \[ \] \($task_id\)/- [~] \1 <!-- BLOCKED: Failed after $max_retries attempts -->/" "$tasks_file"
+                    rm -f "$tasks_file.bak"
+                fi
+                retry_count=0
+                last_task=""
+                iteration=$((iteration + 1))
+                echo ""
+                continue
+            fi
+        else
+            retry_count=0
+            last_task="$next_task"
+        fi
+        
         echo "📋 Next task:"
         echo "   $next_task"
+        if [ "$retry_count" -gt 0 ]; then
+            echo "   (Retry $retry_count of $max_retries)"
+        fi
         echo ""
         
         # Extract task ID for commit message
@@ -641,8 +939,9 @@ ralph_loop() {
         echo ""
         
         # Call GitHub Copilot CLI with Ralph prompt using fast execution tier
+        # Run copilot in the worktree directory
         if [ -n "$RALPH_EXECUTION_MODEL" ]; then
-            copilot --model "$RALPH_EXECUTION_MODEL" -p "You are a worker agent executing a single task.
+            (cd "$wt" && copilot --allow-all-tools --model "$RALPH_EXECUTION_MODEL" -p "You are a worker agent executing a single task.
 
 Read these files in the repository:
 - $RALPH_AI_DIR/SPEC.md (constraints and acceptance criteria)
@@ -661,9 +960,9 @@ Rules:
 
 After implementation:
 - Confirm when complete or report blockers
-- Show what files were changed"
+- Show what files were changed")
         else
-            copilot -p "You are a worker agent executing a single task.
+            (cd "$wt" && copilot --allow-all-tools -p "You are a worker agent executing a single task.
 
 Read these files in the repository:
 - $RALPH_AI_DIR/SPEC.md (constraints and acceptance criteria)
@@ -682,80 +981,47 @@ Rules:
 
 After implementation:
 - Confirm when complete or report blockers
-- Show what files were changed"
+- Show what files were changed")
         fi
         
         echo ""
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         
-        # Check if there are changes
-        if git diff --quiet; then
-            echo "⚠️  No changes detected."
-            printf "Mark task as blocked/skip? [y/N] "
-            read -r skip_ans
-            if [ "${skip_ans:-N}" = "y" ] || [ "${skip_ans:-N}" = "Y" ]; then
-                iteration=$((iteration + 1))
-                continue
-            else
-                break
-            fi
+        # Check if there are changes (in worktree)
+        if (cd "$wt" && git diff --quiet); then
+            echo "⚠️  No changes detected - skipping task"
+            iteration=$((iteration + 1))
+            echo ""
+            continue
         fi
         
         # Show diff
         echo ""
         echo "📊 Changes:"
-        git --no-pager diff --stat
+        (cd "$wt" && git --no-pager diff --stat)
         echo ""
         
-        # Validation prompt (optional)
-        printf "Validate before commit? [y/N] "
-        read -r validate_ans
-        
-        if [ "$validate_ans" = "y" ] || [ "$validate_ans" = "Y" ]; then
-            echo ""
-            ralph_validate
-            echo ""
-        fi
-        
-        # Commit prompt
-        printf "Commit these changes? [Y/n] "
-        read -r commit_ans
-        
-        if [ -z "${commit_ans}" ] || [ "$commit_ans" = "y" ] || [ "$commit_ans" = "Y" ]; then
-            # Extract Jira key if present (e.g., [PPL-123] or PPL-123)
-            local jira_key
-            jira_key=$(echo "$next_task" | grep -o '\[*PPL-[0-9]\+\]*' | tr -d '[]' || true)
-            
-            # Extract commit type and description (format: "TASK-XXX: type: description")
-            local task_desc
-            task_desc=$(echo "$next_task" | sed "s/^TASK-[0-9]\+: //" | sed 's/\[*PPL-[0-9]\+\]*//g' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
-            
-            # Build commit message following Conventional Commits
-            local commit_msg
-            if [ -n "$jira_key" ]; then
-                commit_msg="$task_desc [$jira_key]"
-            else
-                commit_msg="$task_desc"
-            fi
-            
-            git add -A
-            git commit -m "$commit_msg"
-            echo "✅ Committed: $commit_msg"
-            
-            # Mark task complete
-            ralph_complete "$task_id"
+        # Auto-commit changes
+        # Strip TASK-XXX: prefix but preserve everything else including [PPL-####]
+        local commit_msg
+        if command -v gsed >/dev/null 2>&1; then
+            commit_msg=$(echo "$next_task" | gsed 's/^TASK-[0-9]\+: //')
         else
-            echo "⏭️  Skipping commit"
+            commit_msg=$(echo "$next_task" | sed -E 's/^TASK-[0-9]+: //')
         fi
         
-        echo ""
-        printf "Continue to next task? [Y/n] "
-        read -r continue_ans
+        (cd "$wt" && git add -A && git commit -m "$commit_msg")
+        echo "✅ Committed: $commit_msg"
+        had_commits=true
         
-        if [ -n "$continue_ans" ] && [ "$continue_ans" != "y" ] && [ "$continue_ans" != "Y" ]; then
-            echo "🛑 Stopping loop"
-            break
+        # Mark task complete in worktree
+        if command -v gsed >/dev/null 2>&1; then
+            gsed -i "s/^- \[ \] \($task_id\)/- [x] \1/" "$tasks_file"
+        else
+            sed -i.bak "s/^- \[ \] \($task_id\)/- [x] \1/" "$tasks_file"
+            rm -f "$tasks_file.bak"
         fi
+        echo "✅ Marked $task_id as complete"
         
         iteration=$((iteration + 1))
         echo ""
@@ -763,6 +1029,17 @@ After implementation:
     
     echo ""
     echo "🏁 Ralph loop finished after $iteration iteration(s)"
+    
+    # Auto-create PR if there were commits
+    if [ "$had_commits" = true ]; then
+        echo ""
+        _ralph_create_pr
+        
+        echo ""
+        echo "ℹ️  Worktree preserved at: $wt"
+        echo "   To make additional changes: cd $wt && ralph loop"
+        echo "   To clean up: ralph cleanup"
+    fi
 }
 
 # Quick commit with task ID extraction
@@ -929,7 +1206,9 @@ Commands:
   init [OPTIONS]         Initialize Ralph workflow (creates ai/ structure)
     --from-explore       Seed templates with EXPLORE.md references (manual)
     --auto               Use AI to translate EXPLORE.md (requires --from-explore)
-  loop                   Run interactive execution loop
+  loop                   Run interactive execution loop (in isolated worktree)
+  pr                     Create PR from ralph worktree to base branch
+  cleanup                Remove ralph worktree
   task                   Show next unchecked task
   complete TASK-ID       Mark a task as complete
   commit "message"       Commit with Conventional Commits format
@@ -943,21 +1222,32 @@ Workflow:
   2. Edit ai/SPEC.md               # Define constraints
   3. Edit ai/PLAN.md               # Document architecture
   4. Edit ai/TASKS.md              # List tasks
-  5. ralph loop                    # Execute tasks with Copilot
+  5. ralph loop                    # Execute tasks (creates worktree, ends with PR)
 
   # Option 2: Start from exploration (manual)
   1. explore start                 # Investigate and document
   2. explore save-notes            # Export to main repo
   3. ralph init --from-explore     # Seed templates from EXPLORE.md
   4. Edit ai/SPEC/PLAN/TASKS       # Translate findings
-  5. ralph loop                    # Execute tasks
+  5. ralph loop                    # Execute tasks (creates worktree, ends with PR)
 
   # Option 3: Start from exploration (AI-powered)
   1. explore start                 # Investigate and document
   2. explore save-notes            # Export to main repo
   3. ralph init --from-explore --auto   # AI translates EXPLORE.md
   4. Review ai/SPEC/PLAN/TASKS     # Verify and refine
-  5. ralph loop                    # Execute tasks
+  5. ralph loop                    # Execute tasks (creates worktree, ends with PR)
+
+Worktree Isolation:
+  ralph loop automatically:
+  - Creates .ralph-<repo> worktree with ralph-<branch> branch
+  - Executes all tasks in the isolated worktree
+  - Offers to create a PR when complete
+  - Optionally cleans up the worktree
+
+  Resume an interrupted loop:
+    cd $(git worktree list | grep ralph | awk '{print $1}')
+    ralph loop
 
 Task Format (in ai/TASKS.md):
   - [ ] TASK-001: feat: add retry logic [PPL-123]
@@ -977,7 +1267,9 @@ Integration:
   - Use 'explore start' for exploration/discovery
   - Use 'explore save-notes' to export findings to ai/EXPLORE.md
   - Use 'ralph init --from-explore' to seed templates
-  - Use 'ralph loop' for deterministic execution
+  - Use 'ralph loop' for deterministic execution (isolated worktree)
+  - Use 'ralph pr' to create PR from worktree
+  - Use 'ralph cleanup' to remove worktree
   - Use 'ralph validate' before committing to review changes
   - ai/ excluded via .git/info/exclude (run 'ralph init' per repo)
 
@@ -993,6 +1285,8 @@ Model Tiers (optional configuration):
 
 Environment:
   RALPH_AI_DIR              AI directory name (default: ai)
+  RALPH_WORKTREE_PREFIX     Worktree directory prefix (default: .ralph)
+  RALPH_BRANCH_PREFIX       Branch name prefix (default: ralph)
   RALPH_TRANSLATION_MODEL   Model for init --auto (default: claude-sonnet-4.5)
   RALPH_EXECUTION_MODEL     Model for loop (default: gpt-5.1)
   RALPH_VALIDATION_MODEL    Model for validate (default: claude-opus-4.5)
@@ -1001,7 +1295,9 @@ Examples:
   ralph init                              # Blank templates
   ralph init --from-explore               # Manual translation hints
   ralph init --from-explore --auto        # AI-powered translation
-  ralph loop                              # Execute tasks
+  ralph loop                              # Execute tasks in worktree → PR
+  ralph pr                                # Create PR (if not done in loop)
+  ralph cleanup                           # Remove worktree
   ralph validate                          # Review changes
   ralph commit "feat: add retry logic [PPL-123]"
   ralph status
@@ -1010,6 +1306,16 @@ Examples:
   export RALPH_EXECUTION_MODEL="claude-haiku"
   ralph loop
 EOF
+}
+
+# Create PR command
+ralph_pr() {
+    _ralph_create_pr
+}
+
+# Cleanup worktree command
+ralph_cleanup() {
+    _ralph_worktree_cleanup
 }
 
 # Main entry point
@@ -1023,6 +1329,12 @@ main() {
             ;;
         loop)
             ralph_loop "$@"
+            ;;
+        pr)
+            ralph_pr "$@"
+            ;;
+        cleanup)
+            ralph_cleanup "$@"
             ;;
         task)
             ralph_task "$@"
