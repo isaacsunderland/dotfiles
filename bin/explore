@@ -513,10 +513,17 @@ explore_stop() {
     fi
 
     echo "🧹 Removing worktree: $wt"
-    git worktree remove "$wt" || {
-        echo "❌ Failed to remove worktree"
-        return 1
-    }
+    if [ "$force_flag" = "--force" ]; then
+        git worktree remove "$wt" --force || {
+            echo "❌ Failed to remove worktree"
+            return 1
+        }
+    else
+        git worktree remove "$wt" || {
+            echo "❌ Failed to remove worktree"
+            return 1
+        }
+    fi
 
     # Print helpful message if user was in the deleted worktree
     if [[ "$current_dir" == "$wt"* ]]; then
