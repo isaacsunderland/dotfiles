@@ -1,70 +1,15 @@
 # Shared shell helpers for both zsh and bash.
 
-# Add dotfiles bin to PATH
-if [ -d "$HOME/.config/bin" ]; then
-    export PATH="$HOME/.config/bin:$PATH"
-fi
-
-_sanitize_path_entries() {
-    local path_in path_out old_ifs entry
-
-    path_in="$PATH"
-    path_out=""
-    old_ifs="$IFS"
-    IFS=':'
-
-    for entry in $path_in; do
-        case "$entry" in
-            ''|oci://*)
-                continue
-                ;;
-        esac
-
-        if [ -z "$path_out" ]; then
-            path_out="$entry"
-        else
-            path_out="$path_out:$entry"
-        fi
-    done
-
-    IFS="$old_ifs"
-    export PATH="$path_out"
-}
-
-_sanitize_path_entries
-
-_ensure_default_system_path_entries() {
-    local default_entry
-
-    for default_entry in /usr/bin /bin /usr/sbin /sbin; do
-        case ":$PATH:" in
-            *":$default_entry:"*)
-                ;;
-            *)
-                if [ -n "$PATH" ]; then
-                    PATH="$PATH:$default_entry"
-                else
-                    PATH="$default_entry"
-                fi
-                ;;
-        esac
-    done
-
-    export PATH
-}
-
-_ensure_default_system_path_entries
-
 # PATH defaults
+if [ -d "$HOME/dotfiles/bin" ]; then
+    export PATH="$HOME/dotfiles/bin:$PATH"
+fi
 if [ -d /opt/homebrew/bin ]; then
     export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
 fi
 if [ -d /usr/local/bin ]; then
     export PATH="/usr/local/bin:$PATH"
 fi
-
-_sanitize_path_entries
-_ensure_default_system_path_entries
 
 # Prefer Homebrew bash for interactive `bash ...` calls.
 if [ -x /opt/homebrew/bin/bash ]; then
@@ -79,11 +24,11 @@ if [ -n "$DOTFILES_BASH_BIN" ]; then
     alias bash="$DOTFILES_BASH_BIN"
 fi
 
-# Prefer uutils coreutils when available (cached path to avoid slow brew --prefix)
-if [ -d /opt/homebrew/opt/uutils-coreutils/libexec/uubin ]; then
-    export PATH="/opt/homebrew/opt/uutils-coreutils/libexec/uubin:$PATH"
-elif [ -d /usr/local/opt/uutils-coreutils/libexec/uubin ]; then
-    export PATH="/usr/local/opt/uutils-coreutils/libexec/uubin:$PATH"
+# Prefer uutils coreutils when available
+if command -v brew >/dev/null 2>&1; then
+    if [ -d "$(brew --prefix uutils-coreutils 2>/dev/null)/libexec/uubin" ]; then
+        export PATH="$(brew --prefix uutils-coreutils)/libexec/uubin:$PATH"
+    fi
 fi
 
 # FZF default command
@@ -233,3 +178,7 @@ CNPG_EOF
         echo "Warning: Could not install kubectl_complete-cnpg. Ensure /usr/local/bin or /opt/homebrew/bin is writable."
     fi
 }
+# Git explore worktree helpers
+if [ -f "$HOME/.config/shell/explore.sh" ]; then
+    source "$HOME/.config/shell/explore.sh"
+fi

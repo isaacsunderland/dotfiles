@@ -287,9 +287,21 @@ explore_start() {
     # Symlink common gitignored directories to save space
     local symlink_targets=("node_modules" ".venv" "vendor" "data" ".next" "dist" "build" "__pycache__")
     for target in "${symlink_targets[@]}"; do
-        if [ -d "$root/$target" ] && [ ! -e "$wt/$target" ]; then
-            ln -s "$root/$target" "$wt/$target"
-            echo "🔗 Symlinked: $target"
+        if [ -d "$root/$target" ]; then
+            # If target exists in worktree but only has .gitkeep, remove it first
+            if [ -d "$wt/$target" ]; then
+                local file_count
+                file_count=$(find "$wt/$target" -mindepth 1 -maxdepth 1 ! -name '.gitkeep' | wc -l | tr -d ' ')
+                if [ "$file_count" = "0" ]; then
+                    rm -rf "$wt/$target"
+                fi
+            fi
+            
+            # Create symlink if target doesn't exist in worktree
+            if [ ! -e "$wt/$target" ]; then
+                ln -s "$root/$target" "$wt/$target"
+                echo "🔗 Symlinked: $target"
+            fi
         fi
     done
 
@@ -602,14 +614,10 @@ Usage:
   explore <command> [args]
 
 Commands:
-  start [--cli]    Create/open explore worktree for current branch
-                   --cli: Skip VS Code, CLI-only mode
+  start            Create/open explore worktree for current branch
   stop [--force]   Remove explore worktree (optionally discard changes)
   list             List active explore worktrees
-  resume [--cli]   Reopen explore worktree in VS Code
-                   --cli: Show prompt without opening VS Code
-  cd               Print explore worktree path (use with: cd $(explore cd))
-  prompt           Generate and display Copilot CLI prompt
+  resume           Reopen explore worktree in VS Code
   doctor           Run safety and state diagnostics
   save-notes       Save ai/EXPLORE.md from explore worktree to repo ai/EXPLORE.md
   help             Show this help
@@ -620,12 +628,7 @@ Environment:
   GIT_EXPLORE_BRANCH         Explicit branch name override
 
 Examples:
-  explore start              # Opens in VS Code
-  explore start --cli        # CLI-only mode
-  cd $(explore cd)           # cd to explore worktree
-  explore resume             # Reopen in VS Code
-  explore resume --cli       # Resume in CLI mode
-  explore prompt             # Display Copilot CLI prompt
+  explore start
   explore stop --force
   explore doctor
   explore save-notes

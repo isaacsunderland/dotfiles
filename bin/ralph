@@ -91,6 +91,59 @@ _in_ralph_worktree() {
     [[ "$basename_name" =~ ^${RALPH_WORKTREE_PREFIX}- ]]
 }
 
+# Workspace file used to open ralph mode with distinct VS Code colors
+_ralph_workspace_file() {
+    local wt
+    wt="$(_ralph_worktree_path)"
+    echo "$wt/ai/ralph.code-workspace"
+}
+
+# Open worktree in VS Code with a dedicated dark-green visual identity
+_open_ralph_workspace() {
+    local wt
+    wt="$(_ralph_worktree_path)"
+    
+    if [ ! -d "$wt" ]; then
+        echo "❌ Ralph worktree not found at: $wt"
+        echo "   Run 'ralph loop' first to create it"
+        return 1
+    fi
+    
+    local ws
+    ws="$(_ralph_workspace_file)"
+    
+    mkdir -p "$wt/ai"
+    cat > "$ws" <<'EOF'
+{
+    "folders": [
+        { "path": ".." }
+    ],
+    "settings": {
+        "workbench.colorCustomizations": {
+            "titleBar.activeBackground": "#0d1f0d",
+            "titleBar.activeForeground": "#e6ffe6",
+            "titleBar.inactiveBackground": "#0a150a",
+            "titleBar.inactiveForeground": "#b3d9b3",
+            "activityBar.background": "#0e1f0e",
+            "activityBar.foreground": "#ccffcc",
+            "statusBar.background": "#0f2d0f",
+            "statusBar.foreground": "#e6ffe6",
+            "statusBar.noFolderBackground": "#0f2d0f",
+            "statusBar.debuggingBackground": "#1a4d1a"
+        },
+        "window.title": "Ralph: ${folderName}"
+    }
+}
+EOF
+    
+    echo "📂 Opening ralph worktree in VS Code..."
+    echo "   Workspace: $ws"
+    code -n "$ws" >/dev/null 2>&1 || {
+        echo "⚠️  Failed to open VS Code. Is 'code' command installed?"
+        return 1
+    }
+}
+
 # Create or resume the ralph worktree
 _ralph_worktree_setup() {
     local root
@@ -137,6 +190,27 @@ _ralph_worktree_setup() {
     else
         echo "⚠️  Warning: $RALPH_AI_DIR/ not found in main repo" >&2
     fi
+    
+    # Symlink common gitignored directories to save space
+    local symlink_targets=("node_modules" ".venv" "vendor" "data" ".next" "dist" "build" "__pycache__")
+    for target in "${symlink_targets[@]}"; do
+        if [ -d "$root/$target" ]; then
+            # If target exists in worktree but only has .gitkeep, remove it first
+            if [ -d "$wt/$target" ]; then
+                local file_count
+                file_count=$(find "$wt/$target" -mindepth 1 -maxdepth 1 ! -name '.gitkeep' 2>/dev/null | wc -l | tr -d ' ')
+                if [ "$file_count" = "0" ]; then
+                    rm -rf "$wt/$target"
+                fi
+            fi
+            
+            # Create symlink if target doesn't exist in worktree
+            if [ ! -e "$wt/$target" ]; then
+                ln -s "$root/$target" "$wt/$target"
+                echo "   🔗 Symlinked: $target" >&2
+            fi
+        fi
+    done
     
     echo "   Worktree: $wt" >&2
     echo "   Branch: $ralph_branch" >&2
@@ -1206,7 +1280,8 @@ Commands:
   init [OPTIONS]         Initialize Ralph workflow (creates ai/ structure)
     --from-explore       Seed templates with EXPLORE.md references (manual)
     --auto               Use AI to translate EXPLORE.md (requires --from-explore)
-  loop                   Run interactive execution loop (in isolated worktree)
+  loop                   Automated execution loop (creates worktree, runs tasks, creates PR)
+  open                   Open ralph worktree in VS Code with dark green theme
   pr                     Create PR from ralph worktree to base branch
   cleanup                Remove ralph worktree
   task                   Show next unchecked task
@@ -1222,32 +1297,38 @@ Workflow:
   2. Edit ai/SPEC.md               # Define constraints
   3. Edit ai/PLAN.md               # Document architecture
   4. Edit ai/TASKS.md              # List tasks
-  5. ralph loop                    # Execute tasks (creates worktree, ends with PR)
+  5. ralph loop                    # Automated execution → PR
+  6. ralph open                    # (Optional) Manual post-loop refinements
 
   # Option 2: Start from exploration (manual)
   1. explore start                 # Investigate and document
   2. explore save-notes            # Export to main repo
   3. ralph init --from-explore     # Seed templates from EXPLORE.md
   4. Edit ai/SPEC/PLAN/TASKS       # Translate findings
-  5. ralph loop                    # Execute tasks (creates worktree, ends with PR)
+  5. ralph loop                    # Automated execution → PR
+  6. ralph open                    # (Optional) Manual post-loop refinements
 
   # Option 3: Start from exploration (AI-powered)
   1. explore start                 # Investigate and document
   2. explore save-notes            # Export to main repo
   3. ralph init --from-explore --auto   # AI translates EXPLORE.md
   4. Review ai/SPEC/PLAN/TASKS     # Verify and refine
-  5. ralph loop                    # Execute tasks (creates worktree, ends with PR)
+  5. ralph loop                    # Automated execution → PR
+  6. ralph open                    # (Optional) Manual post-loop refinements
 
 Worktree Isolation:
   ralph loop automatically:
   - Creates .ralph-<repo> worktree with ralph-<branch> branch
-  - Executes all tasks in the isolated worktree
+  - Executes all tasks sequentially (fully automated)
+  - Commits each completed task
   - Offers to create a PR when complete
   - Optionally cleans up the worktree
 
-  Resume an interrupted loop:
-    cd $(git worktree list | grep ralph | awk '{print $1}')
-    ralph loop
+  Manual post-loop work:
+    ralph open                     # Opens worktree in VS Code (dark green theme)
+    # Make refinements, then:
+    ralph pr                       # Create/update PR
+    ralph cleanup                  # Remove worktree
 
 Task Format (in ai/TASKS.md):
   - [ ] TASK-001: feat: add retry logic [PPL-123]
@@ -1267,10 +1348,11 @@ Integration:
   - Use 'explore start' for exploration/discovery
   - Use 'explore save-notes' to export findings to ai/EXPLORE.md
   - Use 'ralph init --from-explore' to seed templates
-  - Use 'ralph loop' for deterministic execution (isolated worktree)
+  - Use 'ralph loop' for automated execution in isolated worktree
+  - Use 'ralph open' to manually refine changes before PR
   - Use 'ralph pr' to create PR from worktree
   - Use 'ralph cleanup' to remove worktree
-  - Use 'ralph validate' before committing to review changes
+  - Use 'ralph validate' to review changes
   - ai/ excluded via .git/info/exclude (run 'ralph init' per repo)
 
 Model Tiers (optional configuration):
@@ -1295,7 +1377,8 @@ Examples:
   ralph init                              # Blank templates
   ralph init --from-explore               # Manual translation hints
   ralph init --from-explore --auto        # AI-powered translation
-  ralph loop                              # Execute tasks in worktree → PR
+  ralph loop                              # Automated execution → PR
+  ralph open                              # Open worktree in VS Code
   ralph pr                                # Create PR (if not done in loop)
   ralph cleanup                           # Remove worktree
   ralph validate                          # Review changes
@@ -1329,6 +1412,9 @@ main() {
             ;;
         loop)
             ralph_loop "$@"
+            ;;
+        open)
+            _open_ralph_workspace "$@"
             ;;
         pr)
             ralph_pr "$@"
