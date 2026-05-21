@@ -23,6 +23,7 @@ brew "pinentry-mac" # macOS pinentry for GPG
 brew "navi"         # Interactive cheatsheets (fzf-powered)
 brew "jq"           # JSON query and transformation
 brew "gh"           # GitHub CLI
+brew "fileicon"     # Set custom file/folder icons (used by VSCode icon persistence)
 brew "helm"         # Kubernetes package manager
 brew "node"         # JavaScript runtime
 

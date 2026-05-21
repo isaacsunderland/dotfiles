@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>com.iqgeo.vscode-icon.persist</string>
+
+    <key>ProgramArguments</key>
+    <array>
+      <string>/bin/bash</string>
+      <string>-c</string>
+      <string>sleep 10 &amp;&amp; __HOME__/dotfiles/bin/apply-vscode-iqgeo-icon.sh</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>WatchPaths</key>
+    <array>
+      <string>/Applications/Visual Studio Code.app</string>
+      <string>/Applications/Visual Studio Code.app/Contents/Resources/Code.icns</string>
+      <string>/Applications/Visual Studio Code.app/Contents/Info.plist</string>
+      <string>/opt/homebrew/Caskroom/visual-studio-code</string>
+    </array>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/com.iqgeo.vscode-icon.persist.out.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/tmp/com.iqgeo.vscode-icon.persist.err.log</string>
+  </dict>
+</plist>

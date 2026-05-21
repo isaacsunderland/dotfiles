@@ -91,3 +91,30 @@ KEYBOARD_ID=$(ioreg -r -n IOHIDKeyboard -d 1 | grep -E '(VendorID|ProductID)' | 
 echo "Finished configuring macOS defaults."
 echo "Note: Some changes may require a restart or logout to take effect."
 echo "Touch ID has been enabled for sudo commands."
+
+# VSCode custom icon persistence
+echo "Setting up VSCode custom icon persistence..."
+DOTFILES_DIR="${DOTFILES_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+
+# Link icon assets to ~/.config/vscode/icon/
+mkdir -p ~/.config/vscode/icon
+if [ -f "$DOTFILES_DIR/config/vscode/icon/vscode-iqgeo-green.icns" ]; then
+    ln -sfv "$DOTFILES_DIR/config/vscode/icon/vscode-iqgeo-green.icns" ~/.config/vscode/icon/
+    ln -sfv "$DOTFILES_DIR/config/vscode/icon/vscode-iqgeo-green-1024.png" ~/.config/vscode/icon/
+fi
+
+# Install LaunchAgent for icon persistence (runs at login + watches for VSCode updates)
+mkdir -p ~/Library/LaunchAgents
+PLIST_SRC="$DOTFILES_DIR/macos/com.iqgeo.vscode-icon.persist.plist"
+PLIST_DST="$HOME/Library/LaunchAgents/com.iqgeo.vscode-icon.persist.plist"
+if [ -f "$PLIST_SRC" ]; then
+    sed "s|__HOME__|$HOME|g" "$PLIST_SRC" > "$PLIST_DST"
+    launchctl unload "$PLIST_DST" 2>/dev/null || true
+    launchctl load "$PLIST_DST"
+    echo "✓ VSCode icon LaunchAgent installed and loaded"
+fi
+
+# Apply the icon now
+if [ -x "$DOTFILES_DIR/bin/apply-vscode-iqgeo-icon.sh" ]; then
+    bash "$DOTFILES_DIR/bin/apply-vscode-iqgeo-icon.sh" && echo "✓ VSCode custom icon applied"
+fi
