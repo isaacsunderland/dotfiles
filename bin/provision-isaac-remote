@@ -17,10 +17,22 @@ REMOTE_BLOCK='
 export TERM=xterm-256color
 export COLORTERM=truecolor
 
-# Prevent remote processes from trying to launch a browser
-# (URLs are best opened via kitty on the local Mac)
-export BROWSER=echo
+# Prevent remote processes from trying to launch a browser.
+# URLs are best opened via kitty on the local Mac (click or ctrl+click).
+# Use a no-op wrapper that prints the URL and exits immediately.
+export BROWSER="echo \[remote\] open URL:"
+
+# Override xdg-open so tools that call it directly don'\''t hang on headless
+if [ -d "$HOME/.local/bin" ]; then
+    export PATH="$HOME/.local/bin:$PATH"
+fi
 # --- end isaac-remote-provision ---'
+
+# xdg-open shim that just prints the URL instead of hanging
+XDG_OPEN_SHIM='#!/bin/sh
+# Shim: print URL instead of hanging on headless system
+echo "[remote] would open: $1"
+exit 0'
 
 provision_host() {
     local host="$1"
@@ -32,8 +44,9 @@ provision_host() {
         return 0
     fi
 
-    # Append the block
-    ssh "$host" "cat >> ~/.bashrc" <<< "$REMOTE_BLOCK"
+    # Append the block and install xdg-open shim
+    ssh "$host" "mkdir -p ~/.local/bin && cat >> ~/.bashrc" <<< "$REMOTE_BLOCK"
+    ssh "$host" "cat > ~/.local/bin/xdg-open && chmod +x ~/.local/bin/xdg-open" <<< "$XDG_OPEN_SHIM"
     echo "  ✓ $host provisioned."
 }
 
