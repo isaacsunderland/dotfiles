@@ -1,76 +1,268 @@
 #!/bin/bash
-# Provision a remote -isaac host with shell environment settings.
+# Provision a remote -isaac host with a consistent shell environment.
 # Usage: provision-isaac-remote <ssh-host-alias> [<ssh-host-alias> ...]
+#        provision-isaac-remote --all
+#        provision-isaac-remote --update   (re-deploy config to already-provisioned hosts)
 #
-# This appends terminal/browser environment settings to the remote user's
-# .bashrc if not already present. Run this once per new -isaac host.
-# All -isaac hosts in ~/.ssh/config can be provisioned at once with:
-#   provision-isaac-remote --all
+# Deploys: terminal env vars, xdg-open shim, shell config (aliases, prompt,
+# starship), all matching the local dotfiles setup.
+# All -isaac hosts in ~/.ssh/config can be provisioned at once with --all.
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 MARKER="# --- isaac-remote-provision ---"
 
-REMOTE_BLOCK='
+# --- Remote .bashrc block ---
+REMOTE_BASHRC='
 # --- isaac-remote-provision ---
-# Terminal compatibility (set by local Mac provisioning script)
+# Terminal compatibility
 export TERM=xterm-256color
 export COLORTERM=truecolor
+export LANG=en_US.UTF-8
+export LC_ALL=en_US.UTF-8
 
 # Prevent remote processes from trying to launch a browser.
-# URLs are best opened via kitty on the local Mac (click or ctrl+click).
-# Use a no-op wrapper that prints the URL and exits immediately.
-export BROWSER="echo \[remote\] open URL:"
+# URLs appear in kitty on the local Mac — click to open.
+export BROWSER="echo [remote] open URL:"
 
-# Override xdg-open so tools that call it directly don'\''t hang on headless
+# Local bin (for xdg-open shim and user scripts)
 if [ -d "$HOME/.local/bin" ]; then
     export PATH="$HOME/.local/bin:$PATH"
 fi
+
+# History
+export HISTSIZE=10000
+export HISTFILESIZE=10000
+export HISTCONTROL=ignoredups:erasedups
+shopt -s histappend 2>/dev/null
+
+# Shell options
+shopt -s checkwinsize 2>/dev/null
+shopt -s cdspell 2>/dev/null
+shopt -s dirspell 2>/dev/null
+shopt -s globstar 2>/dev/null
+
+# Colors
+export LS_COLORS='\''di=1;34:ln=1;36:so=1;35:pi=1;33:ex=1;32:bd=1;33;40:cd=1;33;40:su=1;32;40:sg=1;32;40:tw=1;32;40:ow=1;32;40'\''
+export CLICOLOR=1
+
+# Editor fallback: nvim -> vim -> vi
+if command -v nvim >/dev/null 2>&1; then
+    alias vim="nvim"; alias vi="nvim"
+    export EDITOR="nvim"; export VISUAL="nvim"
+elif command -v vim >/dev/null 2>&1; then
+    alias vi="vim"
+    export EDITOR="vim"; export VISUAL="vim"
+else
+    export EDITOR="vi"; export VISUAL="vi"
+fi
+
+# Modern tool aliases (eza/bat/fd/rg if available)
+if command -v eza >/dev/null 2>&1; then
+    alias ls="eza"
+    alias l="eza -l --icons --git -a"
+    alias ll="eza -l --icons --git"
+    alias la="eza -la --icons --git"
+    alias lt="eza --tree --level=2 --long --icons --git"
+    alias tree="eza --tree"
+else
+    alias l="ls -lah --color=auto"
+    alias ll="ls -lh --color=auto"
+    alias la="ls -lAh --color=auto"
+fi
+
+if command -v bat >/dev/null 2>&1; then
+    alias cat="bat --style=auto"
+    alias ccat="/bin/cat"
+fi
+
+if command -v fd >/dev/null 2>&1; then
+    alias find="fd"
+fi
+
+if command -v rg >/dev/null 2>&1; then
+    alias grep="rg"
+else
+    alias grep="grep --color=auto"
+fi
+
+# Navigation
+alias ..="cd .."
+alias ...="cd ../.."
+alias ....="cd ../../.."
+
+# Prompt: starship if available, otherwise git-aware PS1
+if command -v starship >/dev/null 2>&1; then
+    eval "$(starship init bash)"
+else
+    __parse_git_branch() {
+        git branch 2>/dev/null | sed -e '\''/^[^*]/d'\'' -e '\''s/* \(.*\)/ (\1)/'\''
+    }
+    export PS1='\''\[\033[1;32m\]\u@\h\[\033[0m\]:\[\033[1;34m\]\w\[\033[1;33m\]$(__parse_git_branch)\[\033[0m\]\$ '\''
+fi
+
+# Bash completion
+if ! shopt -oq posix 2>/dev/null; then
+    if [ -f /usr/share/bash-completion/bash_completion ]; then
+        . /usr/share/bash-completion/bash_completion
+    elif [ -f /etc/bash_completion ]; then
+        . /etc/bash_completion
+    fi
+fi
+
+# FZF
+if [ -f ~/.fzf.bash ]; then
+    source ~/.fzf.bash
+fi
+if command -v fd >/dev/null 2>&1; then
+    export FZF_DEFAULT_COMMAND='\''fd --type f --hidden --follow'\''
+fi
+
+# zoxide (if installed)
+if command -v zoxide >/dev/null 2>&1; then
+    eval "$(zoxide init bash)"
+fi
 # --- end isaac-remote-provision ---'
 
-# xdg-open shim that just prints the URL instead of hanging
+# --- xdg-open shim ---
 XDG_OPEN_SHIM='#!/bin/sh
 # Shim: print URL instead of hanging on headless system
 echo "[remote] would open: $1"
 exit 0'
 
+install_tools() {
+    local host="$1"
+    echo "  Installing tools on $host (requires sudo)..."
+
+    # Install core packages via apt
+    ssh -t "$host" "sudo apt-get update -qq && sudo apt-get install -y -qq \
+        bat fd-find ripgrep fzf zoxide git curl unzip" || {
+        echo "  ✗ apt install failed on $host"
+        return 1
+    }
+
+    # fd and bat have different binary names on Ubuntu — create symlinks
+    ssh "$host" "
+        [ -x /usr/bin/batcat ] && [ ! -x ~/.local/bin/bat ] && ln -sf /usr/bin/batcat ~/.local/bin/bat
+        [ -x /usr/bin/fdfind ] && [ ! -x ~/.local/bin/fd ] && ln -sf /usr/bin/fdfind ~/.local/bin/fd
+    " || true
+
+    # Install eza (not in default Ubuntu repos, use the official method)
+    ssh "$host" "
+        if ! command -v eza >/dev/null 2>&1; then
+            sudo mkdir -p /etc/apt/keyrings
+            wget -qO- https://raw.githubusercontent.com/eza-community/eza/main/deb.asc | sudo gpg --dearmor -o /etc/apt/keyrings/gierens.gpg 2>/dev/null
+            echo 'deb [signed-by=/etc/apt/keyrings/gierens.gpg] http://deb.gierens.de stable main' | sudo tee /etc/apt/sources.list.d/gierens.list >/dev/null
+            sudo apt-get update -qq && sudo apt-get install -y -qq eza
+        fi
+    " || echo "  ⚠ eza install failed (non-critical)"
+
+    # Install starship
+    ssh -t "$host" "
+        if ! command -v starship >/dev/null 2>&1; then
+            curl -sS https://starship.rs/install.sh | sudo sh -s -- -y
+        fi
+    " || echo "  ⚠ starship install failed (non-critical)"
+
+    echo "  ✓ Tools installed on $host."
+}
+
 provision_host() {
     local host="$1"
+    local force="${2:-false}"
+    local tools="${3:-false}"
     echo "Provisioning $host..."
 
-    # Check if already provisioned
-    if ssh "$host" "grep -qF '$MARKER' ~/.bashrc 2>/dev/null"; then
-        echo "  ✓ $host already provisioned, skipping."
-        return 0
+    # Check if already provisioned (skip unless --update)
+    if [ "$force" != "true" ]; then
+        if ssh "$host" "grep -qF '$MARKER' ~/.bashrc 2>/dev/null"; then
+            echo "  ✓ $host already provisioned, skipping. (use --update to re-deploy)"
+            return 0
+        fi
+    else
+        # Remove old provision block before re-deploying
+        ssh "$host" "sed -i '/^# --- isaac-remote-provision ---$/,/^# --- end isaac-remote-provision ---$/d' ~/.bashrc 2>/dev/null || true"
     fi
 
-    # Append the block and install xdg-open shim
-    ssh "$host" "mkdir -p ~/.local/bin && cat >> ~/.bashrc" <<< "$REMOTE_BLOCK"
+    # Create directories
+    ssh "$host" "mkdir -p ~/.local/bin ~/.config"
+
+    # Deploy .bashrc block
+    ssh "$host" "cat >> ~/.bashrc" <<< "$REMOTE_BASHRC"
+
+    # Deploy xdg-open shim
     ssh "$host" "cat > ~/.local/bin/xdg-open && chmod +x ~/.local/bin/xdg-open" <<< "$XDG_OPEN_SHIM"
-    echo "  ✓ $host provisioned."
+
+    # Install tools if requested
+    if [ "$tools" = "true" ]; then
+        install_tools "$host"
+    fi
+
+    # Deploy starship config if starship is available remotely
+    if ssh "$host" "command -v starship >/dev/null 2>&1"; then
+        scp -q "$SCRIPT_DIR/config/starship.toml" "$host:~/.config/starship.toml"
+        echo "  ✓ $host provisioned (with starship config)."
+    else
+        echo "  ✓ $host provisioned (starship not installed — using git-aware PS1)."
+        echo "    Tip: run with --install-tools or manually: curl -sS https://starship.rs/install.sh | sh"
+    fi
+}
+
+get_isaac_hosts() {
+    grep -E '^Host .+-isaac$' ~/.ssh/config | awk '{print $2}'
 }
 
 if [ $# -eq 0 ]; then
-    echo "Usage: provision-isaac-remote <host-alias> [...]"
+    echo "Usage: provision-isaac-remote [options] <host-alias> [...]"
     echo "       provision-isaac-remote --all"
+    echo "       provision-isaac-remote --update         (re-deploy config to all -isaac hosts)"
+    echo "       provision-isaac-remote --install-tools  (also install eza/bat/fd/rg/fzf/starship)"
     echo ""
-    echo "Provisions remote .bashrc with terminal/browser env vars."
+    echo "Provisions remote -isaac hosts with consistent shell environment:"
+    echo "  • Terminal env (TERM, COLORTERM, LANG)"
+    echo "  • xdg-open shim (prevents headless browser hang)"
+    echo "  • Aliases (eza/bat/fd/rg with fallbacks)"
+    echo "  • Prompt (starship or git-aware PS1)"
+    echo "  • History, completion, FZF, zoxide"
+    echo ""
+    echo "Options:"
+    echo "  --all            Provision all *-isaac hosts in ~/.ssh/config"
+    echo "  --update         Re-deploy config (removes old block, re-appends)"
+    echo "  --install-tools  Install CLI tools via apt + starship (requires sudo)"
     exit 1
 fi
 
-if [ "$1" = "--all" ]; then
-    # Find all *-isaac hosts from SSH config
-    hosts=$(grep -E '^Host .+-isaac$' ~/.ssh/config | awk '{print $2}')
+FORCE="false"
+INSTALL_TOOLS="false"
+
+# Parse flags
+args=()
+for arg in "$@"; do
+    case "$arg" in
+        --update)       FORCE="true" ;;
+        --install-tools) INSTALL_TOOLS="true" ;;
+        *)              args+=("$arg") ;;
+    esac
+done
+
+# Default to --all if no hosts specified after parsing flags
+if [ ${#args[@]} -eq 0 ]; then
+    args=("--all")
+fi
+
+if [ "${args[0]}" = "--all" ]; then
+    hosts=$(get_isaac_hosts)
     if [ -z "$hosts" ]; then
         echo "No *-isaac hosts found in ~/.ssh/config"
         exit 1
     fi
     for h in $hosts; do
-        provision_host "$h" || echo "  ✗ Failed to provision $h (unreachable?)"
+        provision_host "$h" "$FORCE" "$INSTALL_TOOLS" || echo "  ✗ Failed to provision $h (unreachable?)"
     done
 else
-    for h in "$@"; do
-        provision_host "$h" || echo "  ✗ Failed to provision $h (unreachable?)"
+    for h in "${args[@]}"; do
+        provision_host "$h" "$FORCE" "$INSTALL_TOOLS" || echo "  ✗ Failed to provision $h (unreachable?)"
     done
 fi
 
