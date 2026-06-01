@@ -183,6 +183,21 @@ CNPG_EOF
         echo "Warning: Could not install kubectl_complete-cnpg. Ensure /usr/local/bin or /opt/homebrew/bin is writable."
     fi
 }
+# GitHub Copilot CLI: default to auto model unless --model is explicitly passed
+copilot() {
+    local has_model=false
+    for arg in "$@"; do
+        case "$arg" in
+            --model|--model=*) has_model=true; break ;;
+        esac
+    done
+    if [ "$has_model" = false ]; then
+        command copilot --model auto "$@"
+    else
+        command copilot "$@"
+    fi
+}
+
 # Git explore worktree helpers
 if [ -f "$HOME/.config/shell/explore.sh" ]; then
     source "$HOME/.config/shell/explore.sh"
