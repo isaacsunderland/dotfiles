@@ -1,5 +1,10 @@
 # Shared shell helpers for both zsh and bash.
 
+# macOS: use system open as browser so CLI tools launch Safari/Chrome locally
+if [ "$(uname)" = "Darwin" ]; then
+    export BROWSER="open"
+fi
+
 # PATH defaults
 if [ -d "$HOME/dotfiles/bin" ]; then
     export PATH="$HOME/dotfiles/bin:$PATH"

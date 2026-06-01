@@ -1,0 +1,65 @@
+#!/bin/bash
+# Provision a remote -isaac host with shell environment settings.
+# Usage: provision-isaac-remote <ssh-host-alias> [<ssh-host-alias> ...]
+#
+# This appends terminal/browser environment settings to the remote user's
+# .bashrc if not already present. Run this once per new -isaac host.
+# All -isaac hosts in ~/.ssh/config can be provisioned at once with:
+#   provision-isaac-remote --all
+
+set -euo pipefail
+
+MARKER="# --- isaac-remote-provision ---"
+
+REMOTE_BLOCK='
+# --- isaac-remote-provision ---
+# Terminal compatibility (set by local Mac provisioning script)
+export TERM=xterm-256color
+export COLORTERM=truecolor
+
+# Prevent remote processes from trying to launch a browser
+# (URLs are best opened via kitty on the local Mac)
+export BROWSER=echo
+# --- end isaac-remote-provision ---'
+
+provision_host() {
+    local host="$1"
+    echo "Provisioning $host..."
+
+    # Check if already provisioned
+    if ssh "$host" "grep -qF '$MARKER' ~/.bashrc 2>/dev/null"; then
+        echo "  ✓ $host already provisioned, skipping."
+        return 0
+    fi
+
+    # Append the block
+    ssh "$host" "cat >> ~/.bashrc" <<< "$REMOTE_BLOCK"
+    echo "  ✓ $host provisioned."
+}
+
+if [ $# -eq 0 ]; then
+    echo "Usage: provision-isaac-remote <host-alias> [...]"
+    echo "       provision-isaac-remote --all"
+    echo ""
+    echo "Provisions remote .bashrc with terminal/browser env vars."
+    exit 1
+fi
+
+if [ "$1" = "--all" ]; then
+    # Find all *-isaac hosts from SSH config
+    hosts=$(grep -E '^Host .+-isaac$' ~/.ssh/config | awk '{print $2}')
+    if [ -z "$hosts" ]; then
+        echo "No *-isaac hosts found in ~/.ssh/config"
+        exit 1
+    fi
+    for h in $hosts; do
+        provision_host "$h" || echo "  ✗ Failed to provision $h (unreachable?)"
+    done
+else
+    for h in "$@"; do
+        provision_host "$h" || echo "  ✗ Failed to provision $h (unreachable?)"
+    done
+fi
+
+echo ""
+echo "Done. Remote hosts will pick up changes on next login."
